@@ -252,16 +252,17 @@ export function App() {
         const container = canvasRef.current;
         if (!container) return;
 
-        // Ensure container fills parent, then force layout to get actual pixel dimensions
-        container.style.width = '100%';
-        container.style.height = '100%';
+        // Wait for layout to settle before reading dimensions
+        await new Promise(resolve => requestAnimationFrame(resolve));
         const rect = container.getBoundingClientRect();
+        const w = rect.width || container.clientWidth || window.innerWidth;
+        const h = rect.height || container.clientHeight || window.innerHeight;
 
         const app = new Application();
         await app.init({
           background: '#0a0a1a',
-          width: rect.width,
-          height: rect.height,
+          width: w,
+          height: h,
           resizeTo: container,
           antialias: true,
           preference: 'webgl',
