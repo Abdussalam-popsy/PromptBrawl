@@ -227,9 +227,11 @@ export class GameLoop {
     // Check game over
     if (this.p1.state === 'dead') {
       this.gameOver = true;
+      console.log('[GameLoop] P1 dead, P2 wins:', this.p2.config.name);
       this.callbacks.onGameOver(this.p2.config);
     } else if (this.p2.state === 'dead') {
       this.gameOver = true;
+      console.log('[GameLoop] P2 dead, P1 wins:', this.p1.config.name);
       this.callbacks.onGameOver(this.p1.config);
     }
   };

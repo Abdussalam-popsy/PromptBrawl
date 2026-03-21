@@ -318,7 +318,11 @@ export function App() {
         const gameLoop = new GameLoop(app, p1Config, p2Config, mode, {
           onHealthChange: (h1, h2) => { setP1Hp(h1); setP2Hp(h2); },
           onSpecialCooldown: (cd1, cd2) => { setP1SpecialCd(cd1); setP2SpecialCd(cd2); },
-          onGameOver: (winnerConfig) => { setWinner(winnerConfig); setScreen('victory'); },
+          onGameOver: (winnerConfig) => {
+            console.log('[GameOver] Winner:', winnerConfig.name, winnerConfig);
+            setWinner(winnerConfig);
+            setScreen('victory');
+          },
           onPeerDisconnected: () => { setPeerDisconnected(true); gameLoopRef.current?.pause(); },
         }, mpRef.current ?? undefined, isHost);
         gameLoopRef.current = gameLoop;
@@ -375,8 +379,12 @@ export function App() {
       background: '#06060f',
       position: 'relative',
     }}>
-      {/* PixiJS canvas container — always fullscreen */}
-      <div ref={canvasRef} style={{ position: 'absolute', inset: 0 }} />
+      {/* PixiJS canvas container — only visible during fight */}
+      <div ref={canvasRef} style={{
+        position: 'absolute',
+        inset: 0,
+        display: screen === 'fighting' ? 'block' : 'none',
+      }} />
 
       {/* UI Overlays */}
       {screen === 'modeSelect' && (
