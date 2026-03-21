@@ -304,7 +304,7 @@ export function App() {
     gameLoopRef.current?.triggerButton('jump');
   }, []);
 
-  const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0 || window.matchMedia('(pointer: coarse)').matches;
 
   // Determine special info for the local player's fighter
   const localConfig = isHost ? p1Config : p2Config;
@@ -447,15 +447,21 @@ export function App() {
             const accentColor = localConfig?.color_palette.accent ?? '#b44dff';
             const primaryColor = localConfig?.color_palette.primary ?? '#00d4ff';
 
+            const noTouch: React.CSSProperties = {
+              touchAction: 'manipulation',
+              WebkitTapHighlightColor: 'transparent',
+              WebkitTouchCallout: 'none',
+              userSelect: 'none',
+            };
+
             const atkBtn: React.CSSProperties = {
+              ...noTouch,
               minHeight: '80px',
               minWidth: '80px',
               fontFamily: 'var(--font-display)',
               fontWeight: 700,
               borderRadius: '6px',
               cursor: 'pointer',
-              touchAction: 'manipulation',
-              WebkitTapHighlightColor: 'transparent',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
@@ -465,14 +471,13 @@ export function App() {
             };
 
             const dpadBtn: React.CSSProperties = {
+              ...noTouch,
               minHeight: '70px',
               minWidth: '70px',
               fontFamily: 'var(--font-display)',
               fontWeight: 700,
               borderRadius: '6px',
               cursor: 'pointer',
-              touchAction: 'manipulation',
-              WebkitTapHighlightColor: 'transparent',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -482,6 +487,8 @@ export function App() {
               fontSize: '24px',
               padding: 0,
             };
+
+            const preventMenu = (e: React.MouseEvent) => e.preventDefault();
 
             return (
               <div style={{
@@ -504,12 +511,14 @@ export function App() {
                       onPointerUp={(e) => { e.preventDefault(); handleDpadUp('left'); }}
                       onPointerLeave={(e) => { e.preventDefault(); handleDpadUp('left'); }}
                       onPointerCancel={(e) => { e.preventDefault(); handleDpadUp('left'); }}
+                      onContextMenu={preventMenu}
                       style={dpadBtn}
                     >
                       &#9664;
                     </button>
                     <button
                       onPointerDown={(e) => { e.preventDefault(); handleJumpButton(); }}
+                      onContextMenu={preventMenu}
                       style={{ ...dpadBtn, minHeight: '80px' }}
                     >
                       &#9650;
@@ -519,6 +528,7 @@ export function App() {
                       onPointerUp={(e) => { e.preventDefault(); handleDpadUp('right'); }}
                       onPointerLeave={(e) => { e.preventDefault(); handleDpadUp('right'); }}
                       onPointerCancel={(e) => { e.preventDefault(); handleDpadUp('right'); }}
+                      onContextMenu={preventMenu}
                       style={dpadBtn}
                     >
                       &#9654;
@@ -530,6 +540,7 @@ export function App() {
                 <div style={{ display: 'flex', gap: '6px', pointerEvents: 'auto' }}>
                   <button
                     onPointerDown={(e) => { e.preventDefault(); handleAttackButton('lightAttack'); }}
+                    onContextMenu={preventMenu}
                     style={{
                       ...atkBtn,
                       background: 'linear-gradient(180deg, rgba(0, 212, 255, 0.15), rgba(0, 100, 200, 0.2))',
@@ -544,6 +555,7 @@ export function App() {
 
                   <button
                     onPointerDown={(e) => { e.preventDefault(); handleAttackButton('heavyAttack'); }}
+                    onContextMenu={preventMenu}
                     style={{
                       ...atkBtn,
                       background: 'linear-gradient(180deg, rgba(255, 136, 0, 0.15), rgba(200, 80, 0, 0.2))',
@@ -558,6 +570,7 @@ export function App() {
 
                   <button
                     onPointerDown={(e) => { e.preventDefault(); handleAttackButton('special'); }}
+                    onContextMenu={preventMenu}
                     style={{
                       ...atkBtn,
                       background: onCooldown
