@@ -1,5 +1,6 @@
 import { Application, Container } from 'pixi.js';
 import { Arena } from './Arena';
+import { ArenaBackground } from './ArenaBackground';
 import { Fighter } from './Fighter';
 import { CombatSystem } from './CombatSystem';
 import { Controls } from './Controls';
@@ -20,6 +21,7 @@ export interface GameCallbacks {
 export class GameLoop {
   private app: Application;
   private arena: Arena;
+  private arenaBg: ArenaBackground;
   private p1: Fighter;
   private p2: Fighter;
   // In online mode, local/remote point to which fighter this client controls
@@ -57,6 +59,15 @@ export class GameLoop {
     const w = this.app.renderer.width;
     const h = this.app.renderer.height;
     this.arena = new Arena(w, h);
+
+    // Dynamic background — use p1's background config (from AI generation)
+    this.arenaBg = new ArenaBackground(p1Config.background, w, h, this.arena.groundY);
+    this.gameContainer.addChild(this.arenaBg.container);
+
+    // Skip Arena's built-in sky when we have a dynamic background
+    if (p1Config.background) {
+      this.arena.skipSky = true;
+    }
     this.gameContainer.addChild(this.arena.container);
 
     // Fighters — p1 is always left, p2 is always right
@@ -97,6 +108,7 @@ export class GameLoop {
       if (newW !== this.arena.width || newH !== this.arena.height) {
         const oldW = this.arena.width;
         this.arena.resize(newW, newH);
+        this.arenaBg.resize(newW, newH, this.arena.groundY);
 
         // Reposition fighters proportionally to new arena size
         this.p1.x = (this.p1.x / oldW) * newW;

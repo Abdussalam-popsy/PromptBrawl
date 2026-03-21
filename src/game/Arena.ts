@@ -10,6 +10,17 @@ export class Arena {
   private ground: Graphics;
   private p1Marker: Graphics;
   private p2Marker: Graphics;
+  private _skipSky: boolean = false;
+
+  /** When true, Arena skips drawing sky/stars/city — an external ArenaBackground handles it. */
+  set skipSky(value: boolean) {
+    this._skipSky = value;
+    this.background.clear();
+    this.ground.clear();
+    this.p1Marker.clear();
+    this.p2Marker.clear();
+    this.drawArena();
+  }
 
   constructor(width: number, height: number) {
     this.width = width;
@@ -31,31 +42,33 @@ export class Arena {
   }
 
   private drawArena(): void {
-    // Sky gradient (using layered rects)
-    const gradientSteps = 20;
-    for (let i = 0; i < gradientSteps; i++) {
-      const t = i / gradientSteps;
-      const r = Math.floor(10 + t * 15);
-      const g = Math.floor(10 + t * 20);
-      const b = Math.floor(30 + t * 40);
-      const color = (r << 16) | (g << 8) | b;
-      const stepH = this.groundY / gradientSteps;
-      this.background.rect(0, i * stepH, this.width, stepH + 1);
-      this.background.fill(color);
-    }
+    if (!this._skipSky) {
+      // Sky gradient (using layered rects)
+      const gradientSteps = 20;
+      for (let i = 0; i < gradientSteps; i++) {
+        const t = i / gradientSteps;
+        const r = Math.floor(10 + t * 15);
+        const g = Math.floor(10 + t * 20);
+        const b = Math.floor(30 + t * 40);
+        const color = (r << 16) | (g << 8) | b;
+        const stepH = this.groundY / gradientSteps;
+        this.background.rect(0, i * stepH, this.width, stepH + 1);
+        this.background.fill(color);
+      }
 
-    // Stars
-    for (let i = 0; i < 60; i++) {
-      const sx = Math.random() * this.width;
-      const sy = Math.random() * this.groundY * 0.6;
-      const size = Math.random() * 2 + 0.5;
-      const brightness = Math.floor(150 + Math.random() * 105);
-      this.background.circle(sx, sy, size);
-      this.background.fill((brightness << 16) | (brightness << 8) | brightness);
-    }
+      // Stars
+      for (let i = 0; i < 60; i++) {
+        const sx = Math.random() * this.width;
+        const sy = Math.random() * this.groundY * 0.6;
+        const size = Math.random() * 2 + 0.5;
+        const brightness = Math.floor(150 + Math.random() * 105);
+        this.background.circle(sx, sy, size);
+        this.background.fill((brightness << 16) | (brightness << 8) | brightness);
+      }
 
-    // City silhouette in background
-    this.drawCitySilhouette();
+      // City silhouette in background
+      this.drawCitySilhouette();
+    }
 
     // Ground
     this.ground.rect(0, this.groundY, this.width, this.height - this.groundY);

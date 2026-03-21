@@ -23,6 +23,21 @@ Victory lines must match the character personality — be witty and entertaining
 
 color_palette values must be valid hex color strings like "#ff4400".
 
+BACKGROUND: Infer the background from the character's home world, origin, or lore — NOT just their appearance.
+Examples: SpongeBob → Bikini Bottom (underwater, sandy floor). A samurai → feudal Japanese castle (misty, stone walls). A robot → neon factory (industrial, glowing). A wizard → enchanted forest (magical, mossy).
+Pick sky_color, ground_color, mid_color as hex colors that evoke that environment.
+elements: 2-3 short visual landmark descriptions for the environment.
+atmosphere: a short mood/theme descriptor.
+
+SILHOUETTE: Choose a body_shape and proportions that match the character's build.
+- Square/circle for stocky characters, rectangle_tall for lean ones, rectangle_wide for bulky/fat, triangle for top-heavy.
+- body_width and body_height: 40-120 pixels each.
+- head_shape: circle (default), square (robotic/boxy), triangle (pointy/alien), none (headless).
+- head_size: 20-60 pixels.
+- limb_style: normal (standard), stubby (short limbs — kids, round characters), long (lanky, spindly), none (blob/ghost/no limbs).
+- color_primary: main body fill hex. color_outline: outline/glow hex.
+- scale: 0.8-1.4 for small vs large characters.
+
 Output schema:
 {
   "name": string,
@@ -32,7 +47,9 @@ Output schema:
   "stats": { "speed": number, "damage": number, "defense": number, "chaos": number },
   "color_palette": { "primary": string, "secondary": string, "accent": string },
   "move_loadout": { "light_attack": string, "heavy_attack": string, "special": string, "projectile_sprite": string },
-  "eye_expression": "neutral" | "angry" | "greedy" | "scared" | "unhinged"
+  "eye_expression": "neutral" | "angry" | "greedy" | "scared" | "unhinged",
+  "background": { "name": string, "sky_color": string, "ground_color": string, "mid_color": string, "elements": string[], "atmosphere": string },
+  "silhouette": { "body_shape": "square"|"rectangle_tall"|"rectangle_wide"|"circle"|"triangle", "body_width": number, "body_height": number, "head_shape": "circle"|"square"|"triangle"|"none", "head_size": number, "limb_style": "normal"|"stubby"|"long"|"none", "color_primary": string, "color_outline": string, "scale": number }
 }`;
 
 const LIGHT_ATTACKS = ['punch', 'kick', 'claw_swipe', 'tail_whip', 'headbutt'];
@@ -49,6 +66,8 @@ const FALLBACK = {
   color_palette: { primary: '#666666', secondary: '#999999', accent: '#cccccc' },
   move_loadout: { light_attack: 'punch', heavy_attack: 'body_slam', special: 'shockwave', projectile_sprite: 'rocks' },
   eye_expression: 'neutral',
+  background: { name: 'Default Arena', sky_color: '#0a0a1e', ground_color: '#1a1a2e', mid_color: '#151530', elements: ['distant buildings', 'dim streetlights'], atmosphere: 'urban night' },
+  silhouette: { body_shape: 'square', body_width: 60, body_height: 60, head_shape: 'circle', head_size: 30, limb_style: 'normal', color_primary: '#666666', color_outline: '#999999', scale: 1.0 },
 };
 
 interface FighterJSON {
@@ -60,6 +79,8 @@ interface FighterJSON {
   color_palette: { primary: string; secondary: string; accent: string };
   move_loadout: { light_attack: string; heavy_attack: string; special: string; projectile_sprite: string };
   eye_expression: string;
+  background?: { name: string; sky_color: string; ground_color: string; mid_color: string; elements: string[]; atmosphere: string };
+  silhouette?: { body_shape: string; body_width: number; body_height: number; head_shape: string; head_size: number; limb_style: string; color_primary: string; color_outline: string; scale: number };
 }
 
 function validate(data: FighterJSON): string | null {
@@ -129,7 +150,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log(`[generate-fighter] Calling Claude with prompt: "${trimmedPrompt.substring(0, 80)}..."`);
     const message = await client.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 1024,
+      max_tokens: 2048,
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: trimmedPrompt }],
     });

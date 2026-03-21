@@ -1,5 +1,5 @@
 import { Container, Graphics } from 'pixi.js';
-import { type FighterConfig, type EyeExpression } from '../ai/fighterConfig';
+import { type FighterConfig, type EyeExpression, type SilhouetteConfig } from '../ai/fighterConfig';
 import { getMoveDef, type MoveDefinition } from '../ai/moveLibrary';
 
 interface SizeParams {
@@ -129,6 +129,153 @@ export class Fighter {
   }
 
   draw(): void {
+    const sil = this.config.silhouette;
+    if (sil) {
+      this.drawSilhouette(sil);
+    } else {
+      this.drawClassic();
+    }
+    // Scale facing
+    this.container.scale.x = this.facing;
+  }
+
+  private drawSilhouette(sil: SilhouetteConfig): void {
+    const sc = this.screenScale * sil.scale;
+    const bw = sil.body_width * sc;
+    const bh = sil.body_height * sc;
+    const hs = sil.head_size * sc;
+    const primaryColor = this.hexToNum(sil.color_primary);
+    const outlineColor = this.hexToNum(sil.color_outline);
+    const accent = this.hexToNum(this.config.color_palette.accent);
+
+    // Clear all parts
+    this.head.clear();
+    this.body.clear();
+    this.leftArm.clear();
+    this.rightArm.clear();
+    this.leftLeg.clear();
+    this.rightLeg.clear();
+    this.weapon.clear();
+    this.leftEye.clear();
+    this.rightEye.clear();
+
+    // --- Glow/outline layer (drawn slightly larger, behind, at 40% alpha) ---
+    const glowPad = 4 * sc;
+    this.drawBodyShape(this.leftArm, sil.body_shape, bw + glowPad * 2, bh + glowPad * 2, -glowPad, { color: outlineColor, alpha: 0.4 });
+
+    // Draw glow for head
+    if (sil.head_shape !== 'none') {
+      this.drawHeadShape(this.rightArm, sil.head_shape, hs + glowPad, bh, { color: outlineColor, alpha: 0.4 });
+    }
+
+    // --- Primary body ---
+    this.drawBodyShape(this.body, sil.body_shape, bw, bh, 0, primaryColor);
+
+    // --- Head ---
+    if (sil.head_shape !== 'none') {
+      this.drawHeadShape(this.head, sil.head_shape, hs, bh, primaryColor);
+    }
+
+    // --- Legs ---
+    const limbDims = this.getLimbDimensions(sil.limb_style, sc);
+    if (limbDims) {
+      const legSpacing = bw * 0.25;
+      // Left leg glow
+      this.leftLeg.roundRect(-legSpacing - limbDims.w / 2 - glowPad / 2, glowPad * -0.5, limbDims.w + glowPad, limbDims.h + glowPad, 3);
+      this.leftLeg.fill({ color: outlineColor, alpha: 0.4 });
+      // Left leg
+      this.leftLeg.roundRect(-legSpacing - limbDims.w / 2, 0, limbDims.w, limbDims.h, 3);
+      this.leftLeg.fill(primaryColor);
+
+      // Right leg glow
+      this.rightLeg.roundRect(legSpacing - limbDims.w / 2 - glowPad / 2, glowPad * -0.5, limbDims.w + glowPad, limbDims.h + glowPad, 3);
+      this.rightLeg.fill({ color: outlineColor, alpha: 0.4 });
+      // Right leg
+      this.rightLeg.roundRect(legSpacing - limbDims.w / 2, 0, limbDims.w, limbDims.h, 3);
+      this.rightLeg.fill(primaryColor);
+    }
+
+    // --- Eyes (reuse existing eye system) ---
+    const eyeParams: SizeParams = {
+      ...this.sizeParams,
+      bodyHeight: bh,
+      headRadius: hs / 2,
+    };
+    this.drawEyes(eyeParams, accent);
+
+    // --- Weapon (on leading hand side) ---
+    const weaponW = this.sizeParams.weaponWidth;
+    const weaponH = this.sizeParams.weaponHeight;
+    const weaponX = bw / 2 + 4;
+    this.weapon.roundRect(weaponX, -bh - 5, weaponW, weaponH, 2);
+    this.weapon.fill(this.hexToNum(this.config.color_palette.accent));
+  }
+
+  private drawBodyShape(
+    gfx: Graphics,
+    shape: string,
+    w: number,
+    h: number,
+    offsetY: number,
+    fill: number | { color: number; alpha: number },
+  ): void {
+    switch (shape) {
+      case 'circle':
+        gfx.ellipse(0, -h / 2 + offsetY, w / 2, h / 2);
+        break;
+      case 'triangle':
+        gfx.moveTo(0, -h + offsetY);
+        gfx.lineTo(w / 2, offsetY);
+        gfx.lineTo(-w / 2, offsetY);
+        gfx.closePath();
+        break;
+      case 'rectangle_tall':
+      case 'rectangle_wide':
+      case 'square':
+      default:
+        gfx.roundRect(-w / 2, -h + offsetY, w, h, 6);
+        break;
+    }
+    gfx.fill(fill);
+  }
+
+  private drawHeadShape(
+    gfx: Graphics,
+    shape: string,
+    size: number,
+    bodyHeight: number,
+    fill: number | { color: number; alpha: number },
+  ): void {
+    const cy = -bodyHeight - size / 2;
+    switch (shape) {
+      case 'square':
+        gfx.roundRect(-size / 2, cy - size / 2, size, size, 4);
+        break;
+      case 'triangle':
+        gfx.moveTo(0, cy - size / 2);
+        gfx.lineTo(size / 2, cy + size / 2);
+        gfx.lineTo(-size / 2, cy + size / 2);
+        gfx.closePath();
+        break;
+      case 'circle':
+      default:
+        gfx.circle(0, cy, size / 2);
+        break;
+    }
+    gfx.fill(fill);
+  }
+
+  private getLimbDimensions(style: string, sc: number): { w: number; h: number } | null {
+    switch (style) {
+      case 'stubby': return { w: 12 * sc, h: 16 * sc };
+      case 'normal': return { w: 10 * sc, h: 22 * sc };
+      case 'long':   return { w: 8 * sc, h: 32 * sc };
+      case 'none':   return null;
+      default:       return { w: 10 * sc, h: 22 * sc };
+    }
+  }
+
+  private drawClassic(): void {
     const s = this.sizeParams;
     const primary = this.hexToNum(this.config.color_palette.primary);
     const secondary = this.hexToNum(this.config.color_palette.secondary);
@@ -179,9 +326,6 @@ export class Fighter {
     // Right Leg
     this.rightLeg.roundRect(s.bodyWidth / 3 - s.legWidth / 2, 0, s.legWidth, s.legHeight, 3);
     this.rightLeg.fill(primary);
-
-    // Scale facing
-    this.container.scale.x = this.facing;
   }
 
   private drawEyes(s: SizeParams, accent: number): void {
