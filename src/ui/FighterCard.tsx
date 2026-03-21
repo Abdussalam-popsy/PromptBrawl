@@ -4,6 +4,7 @@ import { type FighterConfig } from '../ai/fighterConfig';
 interface FighterCardProps {
   config: FighterConfig;
   onFight: () => void;
+  loading?: boolean;
 }
 
 function StatBar({ label, value, max, color, delay }: { label: string; value: number; max: number; color: string; delay: number }) {
@@ -72,7 +73,7 @@ function StatBar({ label, value, max, color, delay }: { label: string; value: nu
   );
 }
 
-export function FighterCard({ config, onFight }: FighterCardProps) {
+export function FighterCard({ config, onFight, loading = false }: FighterCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const primary = config.color_palette.primary;
   const accent = config.color_palette.accent;
@@ -228,6 +229,7 @@ export function FighterCard({ config, onFight }: FighterCardProps) {
       {/* Fight button */}
       <button
         onClick={onFight}
+        disabled={loading}
         className="btn-arcade"
         style={{
           width: '100%',
@@ -235,18 +237,37 @@ export function FighterCard({ config, onFight }: FighterCardProps) {
           fontSize: '18px',
           fontWeight: 900,
           fontFamily: 'var(--font-display)',
-          background: `linear-gradient(135deg, ${primary}28, ${secondary}18)`,
-          color: '#fff',
-          border: `1px solid ${primary}40`,
+          background: loading
+            ? 'rgba(255,255,255,0.04)'
+            : `linear-gradient(135deg, ${primary}28, ${secondary}18)`,
+          color: loading ? 'rgba(255,255,255,0.4)' : '#fff',
+          border: loading ? '1px solid rgba(255,255,255,0.08)' : `1px solid ${primary}40`,
           borderRadius: '2px',
           textTransform: 'uppercase',
           letterSpacing: '0.25em',
-          textShadow: `0 0 20px ${primary}55`,
-          boxShadow: `0 0 40px ${primary}11, inset 0 1px 0 rgba(255,255,255,0.05)`,
+          textShadow: loading ? 'none' : `0 0 20px ${primary}55`,
+          boxShadow: loading ? 'none' : `0 0 40px ${primary}11, inset 0 1px 0 rgba(255,255,255,0.05)`,
           clipPath: 'polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px))',
+          cursor: loading ? 'not-allowed' : 'pointer',
+          pointerEvents: loading ? 'none' : 'auto',
         }}
       >
-        FIGHT
+        {loading ? (
+          <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
+            <span style={{
+              display: 'inline-block',
+              width: '14px',
+              height: '14px',
+              border: '2px solid rgba(255,255,255,0.15)',
+              borderTopColor: 'rgba(255,255,255,0.5)',
+              borderRadius: '50%',
+              animation: 'spin 0.6s linear infinite',
+            }} />
+            SUMMONING OPPONENT...
+          </span>
+        ) : (
+          'FIGHT'
+        )}
       </button>
     </div>
   );

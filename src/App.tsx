@@ -34,6 +34,7 @@ export function App() {
   const [peerDisconnected, setPeerDisconnected] = useState(false);
   const [connectionError, setConnectionError] = useState('');
   const [waitingExpired, setWaitingExpired] = useState(false);
+  const [isGeneratingOpponent, setIsGeneratingOpponent] = useState(false);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
@@ -70,6 +71,7 @@ export function App() {
     setWaitingExpired(false);
     setConnectionError('');
     aiGeneratingRef.current = false;
+    setIsGeneratingOpponent(false);
     stopConfigResend();
     mpRef.current?.disconnect();
     mpRef.current = null;
@@ -169,8 +171,10 @@ export function App() {
     } else if (mode === 'vsAI') {
       if (aiGeneratingRef.current) return;
       aiGeneratingRef.current = true;
+      setIsGeneratingOpponent(true);
       const aiPrompt = getRandomAIPrompt();
       const aiConfig = await generateFighter(aiPrompt);
+      setIsGeneratingOpponent(false);
       setPeerConfig(aiConfig);
       peerConfigRef.current = aiConfig;
       setScreen('vsScreen');
@@ -256,14 +260,37 @@ export function App() {
     const initGame = async () => {
       try {
         const container = canvasRef.current;
-        if (!container) return;
+        if (!container) {
+          console.error('[initGame] No canvas container ref');
+          return;
+        }
 
-        // Wait for layout to settle before reading dimensions
-        await new Promise(resolve => requestAnimationFrame(resolve));
-        const rect = container.getBoundingClientRect();
-        const w = rect.width || container.clientWidth || window.innerWidth;
-        const h = rect.height || container.clientHeight || window.innerHeight;
+        // Wait until container has real dimensions (may take multiple frames)
+        const waitForDimensions = () => new Promise<{ w: number; h: number }>((resolve) => {
+          let attempts = 0;
+          const check = () => {
+            attempts++;
+            const rect = container.getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0) {
+              console.log('[initGame] Container dimensions ready:', rect.width, 'x', rect.height, `(attempt ${attempts})`);
+              resolve({ w: rect.width, h: rect.height });
+            } else if (attempts > 60) {
+              // Fallback after ~1 second of trying
+              const fw = window.innerWidth;
+              const fh = window.innerHeight;
+              console.warn('[initGame] Container still 0x0 after 60 attempts, using window:', fw, 'x', fh);
+              resolve({ w: fw, h: fh });
+            } else {
+              requestAnimationFrame(check);
+            }
+          };
+          check();
+        });
 
+        const { w, h } = await waitForDimensions();
+        if (!mounted) return;
+
+        console.log('[initGame] Initializing PixiJS with:', w, 'x', h);
         const app = new Application();
         await app.init({
           background: '#0a0a1a',
@@ -276,6 +303,7 @@ export function App() {
 
         if (!mounted) return;
 
+        console.log('[initGame] PixiJS initialized, canvas size:', app.screen.width, 'x', app.screen.height);
         container.appendChild(app.canvas as HTMLCanvasElement);
         appRef.current = app;
 
@@ -285,6 +313,7 @@ export function App() {
         };
         window.addEventListener('resize', resizeHandler);
 
+        console.log('[initGame] Creating GameLoop');
         const gameLoop = new GameLoop(app, p1Config, p2Config, mode, {
           onHealthChange: (h1, h2) => { setP1Hp(h1); setP2Hp(h2); },
           onSpecialCooldown: (cd1, cd2) => { setP1SpecialCd(cd1); setP2SpecialCd(cd2); },
@@ -292,9 +321,11 @@ export function App() {
           onPeerDisconnected: () => { setPeerDisconnected(true); gameLoopRef.current?.pause(); },
         }, mpRef.current ?? undefined, isHost);
         gameLoopRef.current = gameLoop;
+        console.log('[initGame] Game started successfully');
       } catch (err) {
-        console.error('Game init failed:', err);
+        console.error('[initGame] Game init failed:', err);
         aiGeneratingRef.current = false;
+        setIsGeneratingOpponent(false);
         setScreen('modeSelect');
       }
     };
@@ -370,6 +401,7 @@ export function App() {
           playerNumber={isHost || mode === 'vsAI' ? 1 : 2}
           onFighterReady={handleP1Ready}
           onBack={() => setScreen('modeSelect')}
+          isGeneratingOpponent={isGeneratingOpponent}
         />
       )}
 

@@ -16,9 +16,10 @@ interface PromptInputProps {
   playerNumber: 1 | 2;
   onFighterReady: (config: FighterConfig) => void;
   onBack: () => void;
+  isGeneratingOpponent?: boolean;
 }
 
-export function PromptInput({ playerNumber, onFighterReady, onBack }: PromptInputProps) {
+export function PromptInput({ playerNumber, onFighterReady, onBack, isGeneratingOpponent = false }: PromptInputProps) {
   const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(false);
   const [fighter, setFighter] = useState<FighterConfig | null>(null);
@@ -76,7 +77,7 @@ export function PromptInput({ playerNumber, onFighterReady, onBack }: PromptInpu
         }}>
           Player {playerNumber} Fighter
         </p>
-        <FighterCard config={fighter} onFight={() => onFighterReady(fighter)} />
+        <FighterCard config={fighter} onFight={() => onFighterReady(fighter)} loading={isGeneratingOpponent} />
         {fighter.name === 'Default Dan' && (
           <p style={{
             fontFamily: 'var(--font-body)',
