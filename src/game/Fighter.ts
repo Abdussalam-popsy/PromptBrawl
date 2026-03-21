@@ -373,6 +373,31 @@ export class Fighter {
     }
   }
 
+  /** Apply remote player state with interpolation for smooth movement */
+  setRemoteState(remote: {
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    facing: 1 | -1;
+    state: FighterState;
+    hp: number;
+    specialCooldown: number;
+    shieldActive: boolean;
+  }): void {
+    const LERP = 0.3;
+    this.x += (remote.x - this.x) * LERP;
+    this.y += (remote.y - this.y) * LERP;
+    this.vx = remote.vx;
+    this.vy = remote.vy;
+    this.facing = remote.facing;
+    this.state = remote.state;
+    this.hp = remote.hp;
+    this.specialCooldown = remote.specialCooldown;
+    this.shieldActive = remote.shieldActive;
+    this.container.scale.x = this.facing;
+  }
+
   reset(startX: number, startY: number, facing: 1 | -1): void {
     this.x = startX;
     this.y = startY;

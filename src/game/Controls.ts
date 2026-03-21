@@ -37,9 +37,9 @@ export class Controls {
 
   getP1Input(): InputState {
     return {
-      left: this.keys.has('a') || this.keys.has('A'),
-      right: this.keys.has('d') || this.keys.has('D'),
-      jump: this.justPressed.has('w') || this.justPressed.has('W'),
+      left: this.keys.has('a') || this.keys.has('A') || this.keys.has('ArrowLeft'),
+      right: this.keys.has('d') || this.keys.has('D') || this.keys.has('ArrowRight'),
+      jump: this.justPressed.has('w') || this.justPressed.has('W') || this.justPressed.has('ArrowUp'),
       lightAttack: this.justPressed.has(' ') || this.buttonTriggers.has('lightAttack'),
       heavyAttack: this.justPressed.has('f') || this.justPressed.has('F') || this.buttonTriggers.has('heavyAttack'),
       special: this.justPressed.has('g') || this.justPressed.has('G') || this.buttonTriggers.has('special'),

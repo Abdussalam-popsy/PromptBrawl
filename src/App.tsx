@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { Application } from 'pixi.js';
 import { type FighterConfig } from './ai/fighterConfig';
 import { generateFighter, getRandomAIPrompt } from './ai/generateFighter';
+import { SPECIAL_DEFS } from './ai/moveLibrary';
 import { GameLoop, type GameMode } from './game/GameLoop';
 import { ModeSelect } from './ui/ModeSelect';
 import { PromptInput } from './ui/PromptInput';
@@ -9,8 +10,10 @@ import { ControlsTutorial } from './ui/ControlsTutorial';
 import { HUD } from './ui/HUD';
 import { PauseMenu } from './ui/PauseMenu';
 import { VictoryScreen } from './ui/VictoryScreen';
+import { Lobby } from './ui/Lobby';
+import { MultiplayerSession, type ConnectionStatus } from './network/multiplayer';
 
-type Screen = 'modeSelect' | 'p1Prompt' | 'p2Prompt' | 'vsScreen' | 'tutorial' | 'fighting' | 'victory';
+type Screen = 'modeSelect' | 'lobby' | 'p1Prompt' | 'p2Prompt' | 'vsScreen' | 'tutorial' | 'fighting' | 'victory';
 
 export function App() {
   const [screen, setScreen] = useState<Screen>('modeSelect');
@@ -23,20 +26,76 @@ export function App() {
   const [p1SpecialCd, setP1SpecialCd] = useState(0);
   const [p2SpecialCd, setP2SpecialCd] = useState(0);
   const [paused, setPaused] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
+  const [roomCode, setRoomCode] = useState('');
+  const [isHost, setIsHost] = useState(false);
+  const [peerJoined, setPeerJoined] = useState(false);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
   const gameLoopRef = useRef<GameLoop | null>(null);
+  const mpRef = useRef<MultiplayerSession | null>(null);
 
   const handleModeSelect = useCallback((selectedMode: GameMode) => {
     setMode(selectedMode);
+    if (selectedMode === 'vsOnline') {
+      setScreen('lobby');
+      // Connect to Ably
+      const session = new MultiplayerSession();
+      mpRef.current = session;
+      session.onConnectionChange = (status) => setConnectionStatus(status);
+      const clientId = `player-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      session.connect(clientId).then(() => {
+        setConnectionStatus('connected');
+      }).catch(err => {
+        console.error('[multiplayer] Connection failed:', err);
+        setConnectionStatus('disconnected');
+      });
+    } else {
+      setScreen('p1Prompt');
+    }
+  }, []);
+
+  const handleCreateRoom = useCallback(async (): Promise<string> => {
+    const session = mpRef.current;
+    if (!session) throw new Error('Not connected');
+    const code = await session.createRoom();
+    setRoomCode(code);
+    setIsHost(true);
+    // When peer joins, move to prompt screen
+    session.onPeerJoined = () => {
+      setPeerJoined(true);
+      setScreen('p1Prompt');
+    };
+    return code;
+  }, []);
+
+  const handleJoinRoom = useCallback(async (code: string): Promise<void> => {
+    const session = mpRef.current;
+    if (!session) throw new Error('Not connected');
+    await session.joinRoom(code);
+    setRoomCode(code);
+    setIsHost(false);
+    // Move to prompt screen immediately after joining
     setScreen('p1Prompt');
+    // Listen for host's fighter config
+    session.onPeerJoined = () => {
+      setPeerJoined(true);
+    };
   }, []);
 
   const handleP1Ready = useCallback(async (config: FighterConfig) => {
     setP1Config(config);
 
-    if (mode === 'vsAI') {
+    if (mode === 'vsOnline') {
+      // Send our fighter config to peer
+      mpRef.current?.sendFighterConfig(config);
+      // If we already have peer's config, proceed
+      if (p2Config) {
+        setScreen('vsScreen');
+      }
+      // Otherwise wait — onFighterConfig callback will advance
+    } else if (mode === 'vsAI') {
       // Auto-generate AI opponent
       const aiPrompt = getRandomAIPrompt();
       const aiConfig = await generateFighter(aiPrompt);
@@ -45,12 +104,24 @@ export function App() {
     } else {
       setScreen('p2Prompt');
     }
-  }, [mode]);
+  }, [mode, p2Config]);
 
   const handleP2Ready = useCallback((config: FighterConfig) => {
     setP2Config(config);
     setScreen('vsScreen');
   }, []);
+
+  // Listen for peer fighter config in online mode
+  useEffect(() => {
+    if (mode !== 'vsOnline' || !mpRef.current) return;
+    mpRef.current.onFighterConfig = (remoteConfig: FighterConfig) => {
+      setP2Config(remoteConfig);
+      // If we already have our own config, advance to VS screen
+      if (p1Config) {
+        setScreen('vsScreen');
+      }
+    };
+  }, [mode, p1Config]);
 
   // VS screen auto-advance to tutorial
   useEffect(() => {
@@ -101,6 +172,13 @@ export function App() {
     setWinner(null);
     setP1Hp(100);
     setP2Hp(100);
+    // Cleanup multiplayer
+    mpRef.current?.disconnect();
+    mpRef.current = null;
+    setRoomCode('');
+    setIsHost(false);
+    setPeerJoined(false);
+    setConnectionStatus('disconnected');
   }, []);
 
   // Start the game when entering fighting screen
@@ -115,6 +193,7 @@ export function App() {
         background: '#0a0a1a',
         resizeTo: window,
         antialias: true,
+        preference: 'webgl',
       });
 
       if (!mounted || !canvasRef.current) return;
@@ -135,7 +214,7 @@ export function App() {
           setWinner(winnerConfig);
           setScreen('victory');
         },
-      });
+      }, mpRef.current ?? undefined);
       gameLoopRef.current = gameLoop;
     };
 
@@ -163,6 +242,13 @@ export function App() {
     setWinner(null);
     setP1Hp(100);
     setP2Hp(100);
+    // Cleanup multiplayer
+    mpRef.current?.disconnect();
+    mpRef.current = null;
+    setRoomCode('');
+    setIsHost(false);
+    setPeerJoined(false);
+    setConnectionStatus('disconnected');
   }, []);
 
   return (
@@ -170,7 +256,7 @@ export function App() {
       width: '100vw',
       height: '100vh',
       overflow: 'hidden',
-      background: '#0a0a1a',
+      background: '#06060f',
       position: 'relative',
     }}>
       {/* PixiJS canvas container */}
@@ -179,6 +265,18 @@ export function App() {
       {/* UI Overlays */}
       {screen === 'modeSelect' && (
         <ModeSelect onSelect={handleModeSelect} />
+      )}
+
+      {screen === 'lobby' && (
+        <Lobby
+          onBack={() => { handleQuit(); }}
+          onCreateRoom={handleCreateRoom}
+          onJoinRoom={handleJoinRoom}
+          connectionStatus={connectionStatus}
+          roomCode={roomCode}
+          isHost={isHost}
+          peerJoined={peerJoined}
+        />
       )}
 
       {screen === 'p1Prompt' && (
@@ -204,31 +302,52 @@ export function App() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: 'linear-gradient(180deg, #0a0a1a 0%, #1a1a3e 100%)',
+          background: `
+            radial-gradient(ellipse at 30% 50%, ${p1Config.color_palette.primary}11 0%, transparent 40%),
+            radial-gradient(ellipse at 70% 50%, ${p2Config.color_palette.primary}11 0%, transparent 40%),
+            linear-gradient(180deg, #06060f 0%, #0d0d24 50%, #06060f 100%)
+          `,
           zIndex: 10,
+          overflow: 'hidden',
         }}>
-          <div style={{ textAlign: 'center' }}>
+          {/* Scanline */}
+          <div style={{
+            position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0.3,
+            background: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.15) 2px, rgba(0,0,0,0.15) 4px)',
+          }} />
+          <div style={{ textAlign: 'center', zIndex: 1 }}>
             <span style={{
+              fontFamily: 'var(--font-display)',
               color: p1Config.color_palette.primary,
-              fontSize: '36px',
+              fontSize: 'clamp(28px, 5vw, 42px)',
               fontWeight: 900,
               textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              textShadow: `0 0 40px ${p1Config.color_palette.primary}44`,
+              animation: 'slide-up 0.4s both',
             }}>
               {p1Config.name}
             </span>
             <span style={{
-              color: '#444',
-              fontSize: '48px',
+              fontFamily: 'var(--font-display)',
+              color: 'rgba(255,255,255,0.12)',
+              fontSize: 'clamp(36px, 6vw, 56px)',
               fontWeight: 900,
-              margin: '0 32px',
+              margin: '0 28px',
+              letterSpacing: '0.1em',
+              animation: 'scale-in 0.3s 0.15s both',
             }}>
               VS
             </span>
             <span style={{
+              fontFamily: 'var(--font-display)',
               color: p2Config.color_palette.primary,
-              fontSize: '36px',
+              fontSize: 'clamp(28px, 5vw, 42px)',
               fontWeight: 900,
               textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              textShadow: `0 0 40px ${p2Config.color_palette.primary}44`,
+              animation: 'slide-up 0.4s 0.1s both',
             }}>
               {p2Config.name}
             </span>
@@ -256,84 +375,113 @@ export function App() {
           />
 
           {/* On-screen attack buttons */}
-          {!paused && (
-            <div style={{
-              position: 'absolute',
-              bottom: '24px',
-              left: '50%',
-              transform: 'translateX(-50%)',
+          {!paused && (() => {
+            const specialName = SPECIAL_DEFS[p1Config.move_loadout.special]?.name
+              ?? p1Config.move_loadout.special.replace(/_/g, ' ');
+            const cooldownSec = Math.ceil(Math.max(0, p1SpecialCd) / 1000);
+            const onCooldown = p1SpecialCd > 0;
+
+            const btnBase: React.CSSProperties = {
+              padding: '0 28px',
+              minHeight: '90px',
+              fontFamily: 'var(--font-display)',
+              fontWeight: 700,
+              borderRadius: '4px',
+              cursor: 'pointer',
+              touchAction: 'manipulation',
+              WebkitTapHighlightColor: 'transparent',
               display: 'flex',
-              gap: '12px',
-              zIndex: 6,
-              userSelect: 'none',
-            }}>
-              <button
-                onPointerDown={(e) => { e.preventDefault(); handleAttackButton('lightAttack'); }}
-                style={{
-                  padding: '16px 28px',
-                  fontSize: '16px',
-                  fontWeight: 800,
-                  background: 'linear-gradient(180deg, rgba(68,136,255,0.9), rgba(34,68,170,0.9))',
-                  color: '#fff',
-                  border: '2px solid rgba(100,160,255,0.6)',
-                  borderRadius: '12px',
-                  cursor: 'pointer',
-                  textTransform: 'uppercase',
-                  letterSpacing: '2px',
-                  touchAction: 'manipulation',
-                  WebkitTapHighlightColor: 'transparent',
-                  boxShadow: '0 4px 15px rgba(68,136,255,0.3)',
-                }}
-              >
-                Attack
-              </button>
-              <button
-                onPointerDown={(e) => { e.preventDefault(); handleAttackButton('heavyAttack'); }}
-                style={{
-                  padding: '16px 28px',
-                  fontSize: '16px',
-                  fontWeight: 800,
-                  background: 'linear-gradient(180deg, rgba(255,136,0,0.9), rgba(200,80,0,0.9))',
-                  color: '#fff',
-                  border: '2px solid rgba(255,170,50,0.6)',
-                  borderRadius: '12px',
-                  cursor: 'pointer',
-                  textTransform: 'uppercase',
-                  letterSpacing: '2px',
-                  touchAction: 'manipulation',
-                  WebkitTapHighlightColor: 'transparent',
-                  boxShadow: '0 4px 15px rgba(255,136,0,0.3)',
-                }}
-              >
-                Heavy
-              </button>
-              <button
-                onPointerDown={(e) => { e.preventDefault(); handleAttackButton('special'); }}
-                style={{
-                  padding: '16px 28px',
-                  fontSize: '16px',
-                  fontWeight: 800,
-                  background: p1SpecialCd > 0
-                    ? 'linear-gradient(180deg, rgba(80,80,80,0.7), rgba(50,50,50,0.7))'
-                    : `linear-gradient(180deg, ${p1Config.color_palette.accent}ee, ${p1Config.color_palette.primary}ee)`,
-                  color: p1SpecialCd > 0 ? '#666' : '#fff',
-                  border: p1SpecialCd > 0
-                    ? '2px solid rgba(100,100,100,0.4)'
-                    : `2px solid ${p1Config.color_palette.accent}88`,
-                  borderRadius: '12px',
-                  cursor: p1SpecialCd > 0 ? 'default' : 'pointer',
-                  textTransform: 'uppercase',
-                  letterSpacing: '2px',
-                  touchAction: 'manipulation',
-                  WebkitTapHighlightColor: 'transparent',
-                  boxShadow: p1SpecialCd > 0 ? 'none' : `0 4px 15px ${p1Config.color_palette.accent}44`,
-                  transition: 'all 0.2s',
-                }}
-              >
-                Special
-              </button>
-            </div>
-          )}
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '4px',
+              transition: 'transform 0.1s, box-shadow 0.2s',
+              position: 'relative',
+              overflow: 'hidden',
+              minWidth: '120px',
+            };
+
+            return (
+              <div style={{
+                position: 'absolute',
+                bottom: '20px',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                display: 'flex',
+                gap: '10px',
+                zIndex: 6,
+                userSelect: 'none',
+              }}>
+                {/* ATTACK */}
+                <button
+                  onPointerDown={(e) => { e.preventDefault(); handleAttackButton('lightAttack'); }}
+                  style={{
+                    ...btnBase,
+                    background: 'linear-gradient(180deg, rgba(0, 212, 255, 0.15), rgba(0, 100, 200, 0.2))',
+                    color: 'var(--neon-blue)',
+                    border: '1px solid rgba(0, 212, 255, 0.25)',
+                    boxShadow: '0 0 20px rgba(0, 212, 255, 0.1)',
+                    fontSize: '14px',
+                    clipPath: 'polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px))',
+                  }}
+                  onPointerUp={e => e.currentTarget.style.transform = 'scale(1)'}
+                >
+                  <span style={{ fontSize: '20px', lineHeight: 1, opacity: 0.8 }}>&#9876;</span>
+                  <span style={{ letterSpacing: '0.15em', textTransform: 'uppercase', fontSize: '13px' }}>ATTACK</span>
+                  <span style={{ fontSize: '9px', color: 'rgba(0, 212, 255, 0.4)', fontWeight: 500, fontFamily: 'var(--font-body)', letterSpacing: '0.05em' }}>Fast hit</span>
+                </button>
+
+                {/* HEAVY */}
+                <button
+                  onPointerDown={(e) => { e.preventDefault(); handleAttackButton('heavyAttack'); }}
+                  style={{
+                    ...btnBase,
+                    background: 'linear-gradient(180deg, rgba(255, 136, 0, 0.15), rgba(200, 80, 0, 0.2))',
+                    color: '#ff8800',
+                    border: '1px solid rgba(255, 136, 0, 0.25)',
+                    boxShadow: '0 0 20px rgba(255, 136, 0, 0.1)',
+                    fontSize: '14px',
+                    clipPath: 'polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px))',
+                  }}
+                  onPointerUp={e => e.currentTarget.style.transform = 'scale(1)'}
+                >
+                  <span style={{ fontSize: '20px', lineHeight: 1, opacity: 0.8 }}>&#128165;</span>
+                  <span style={{ letterSpacing: '0.15em', textTransform: 'uppercase', fontSize: '13px' }}>HEAVY</span>
+                  <span style={{ fontSize: '9px', color: 'rgba(255, 136, 0, 0.4)', fontWeight: 500, fontFamily: 'var(--font-body)', letterSpacing: '0.05em' }}>Slow power</span>
+                </button>
+
+                {/* SPECIAL */}
+                <button
+                  onPointerDown={(e) => { e.preventDefault(); handleAttackButton('special'); }}
+                  style={{
+                    ...btnBase,
+                    background: onCooldown
+                      ? 'rgba(255,255,255,0.03)'
+                      : `linear-gradient(180deg, ${p1Config.color_palette.accent}22, ${p1Config.color_palette.primary}18)`,
+                    color: onCooldown ? 'rgba(255,255,255,0.2)' : '#fff',
+                    border: onCooldown
+                      ? '1px solid rgba(255,255,255,0.06)'
+                      : `1px solid ${p1Config.color_palette.accent}44`,
+                    cursor: onCooldown ? 'default' : 'pointer',
+                    boxShadow: onCooldown ? 'none' : `0 0 20px ${p1Config.color_palette.accent}15`,
+                    opacity: onCooldown ? 0.6 : 1,
+                    minWidth: '130px',
+                    fontSize: '14px',
+                    clipPath: 'polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px))',
+                  }}
+                  onPointerUp={e => e.currentTarget.style.transform = 'scale(1)'}
+                >
+                  <span style={{ fontSize: '18px', lineHeight: 1, opacity: 0.8 }}>{onCooldown ? '\u23F3' : '\u2728'}</span>
+                  <span style={{ letterSpacing: '0.1em', textTransform: 'uppercase', fontSize: '12px' }}>
+                    {onCooldown ? `${cooldownSec}s` : specialName}
+                  </span>
+                  <span style={{ fontSize: '9px', color: onCooldown ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.3)', fontWeight: 500, fontFamily: 'var(--font-body)', letterSpacing: '0.05em' }}>
+                    {onCooldown ? 'Cooldown' : 'Special'}
+                  </span>
+                </button>
+              </div>
+            );
+          })()}
 
           {paused && (
             <PauseMenu

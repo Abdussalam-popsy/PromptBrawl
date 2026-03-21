@@ -19,25 +19,33 @@ function CompactControl({ keys, label }: { keys: string; label: string }) {
     <div style={{
       display: 'flex',
       alignItems: 'center',
-      gap: '8px',
-      marginBottom: '6px',
+      gap: '10px',
+      marginBottom: '8px',
     }}>
       <span style={{
         display: 'inline-block',
-        padding: '2px 8px',
-        background: 'rgba(255,255,255,0.08)',
-        border: '1px solid rgba(255,255,255,0.12)',
-        borderRadius: '4px',
-        fontFamily: 'monospace',
-        fontSize: '12px',
+        padding: '3px 8px',
+        background: 'rgba(255,255,255,0.04)',
+        border: '1px solid rgba(255,255,255,0.08)',
+        borderBottom: '2px solid rgba(255,255,255,0.1)',
+        borderRadius: '2px',
+        fontFamily: 'var(--font-mono)',
+        fontSize: '10px',
         fontWeight: 700,
-        color: '#ccc',
+        color: 'rgba(255,255,255,0.5)',
         minWidth: '28px',
         textAlign: 'center',
       }}>
         {keys}
       </span>
-      <span style={{ color: '#999', fontSize: '12px' }}>{label}</span>
+      <span style={{
+        fontFamily: 'var(--font-body)',
+        color: 'rgba(255,255,255,0.35)',
+        fontSize: '13px',
+        fontWeight: 500,
+      }}>
+        {label}
+      </span>
     </div>
   );
 }
@@ -63,67 +71,77 @@ export function PauseMenu({ p1Config, onResume, onQuit }: PauseMenuProps) {
       flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
-      background: 'rgba(5, 5, 15, 0.88)',
-      backdropFilter: 'blur(4px)',
-      fontFamily: "'Segoe UI', system-ui, sans-serif",
+      background: 'rgba(4, 4, 12, 0.92)',
+      backdropFilter: 'blur(8px)',
+      fontFamily: 'var(--font-body)',
       zIndex: 25,
+      animation: 'fade-in 0.15s both',
     }}>
+      {/* Scanline */}
+      <div style={{
+        position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0.2,
+        background: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.2) 2px, rgba(0,0,0,0.2) 4px)',
+      }} />
+
       <h1 style={{
-        fontSize: '48px',
+        fontFamily: 'var(--font-display)',
+        fontSize: '42px',
         fontWeight: 900,
         color: '#fff',
         textTransform: 'uppercase',
-        letterSpacing: '8px',
+        letterSpacing: '0.2em',
         marginBottom: '36px',
-        textShadow: '0 0 30px rgba(68, 136, 255, 0.3)',
+        textShadow: '0 0 40px rgba(0, 212, 255, 0.2)',
+        zIndex: 1,
       }}>
-        Paused
+        PAUSED
       </h1>
 
       {/* Controls reminder */}
       <div style={{
         marginBottom: '36px',
         padding: '20px 28px',
-        background: 'rgba(255,255,255,0.03)',
-        borderRadius: '12px',
-        border: '1px solid rgba(255,255,255,0.06)',
+        background: 'rgba(255,255,255,0.02)',
+        borderRadius: '4px',
+        border: '1px solid rgba(255,255,255,0.04)',
+        zIndex: 1,
       }}>
         <p style={{
-          color: p1Config.color_palette.primary,
-          fontSize: '13px',
+          fontFamily: 'var(--font-display)',
+          color: 'var(--neon-blue)',
+          fontSize: '10px',
           fontWeight: 700,
           textTransform: 'uppercase',
-          letterSpacing: '2px',
-          marginBottom: '10px',
+          letterSpacing: '0.2em',
+          marginBottom: '12px',
+          opacity: 0.6,
         }}>
           Controls
         </p>
-        <CompactControl keys="A/D" label="Move" />
-        <CompactControl keys="W" label="Jump" />
+        <CompactControl keys="A/D or ???/???" label="Move" />
+        <CompactControl keys="W or ???" label="Jump" />
         <CompactControl keys="Space" label="Light Attack" />
         <CompactControl keys="F" label="Heavy Attack" />
         <CompactControl keys="G" label={getSpecialName(p1Config)} />
       </div>
 
       {/* Buttons */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '240px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '240px', zIndex: 1 }}>
         <button
           onClick={onResume}
+          className="btn-arcade"
           style={{
-            padding: '14px',
-            fontSize: '18px',
+            padding: '16px',
+            fontSize: '16px',
             fontWeight: 700,
-            background: 'linear-gradient(135deg, #4488ff, #2244aa)',
-            color: '#fff',
-            border: '2px solid #6699ff',
-            borderRadius: '10px',
-            cursor: 'pointer',
+            fontFamily: 'var(--font-display)',
+            background: 'linear-gradient(135deg, rgba(0, 212, 255, 0.15), rgba(0, 100, 200, 0.1))',
+            color: 'var(--neon-blue)',
+            border: '1px solid rgba(0, 212, 255, 0.25)',
+            borderRadius: '2px',
             textTransform: 'uppercase',
-            letterSpacing: '3px',
-            transition: 'transform 0.15s',
+            letterSpacing: '0.15em',
           }}
-          onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.03)'}
-          onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
         >
           Resume
         </button>
@@ -132,24 +150,25 @@ export function PauseMenu({ p1Config, onResume, onQuit }: PauseMenuProps) {
           onClick={onQuit}
           style={{
             padding: '14px',
-            fontSize: '16px',
+            fontSize: '14px',
             fontWeight: 600,
+            fontFamily: 'var(--font-body)',
             background: 'transparent',
-            color: '#888',
-            border: '1px solid #333',
-            borderRadius: '10px',
+            color: 'rgba(255,255,255,0.25)',
+            border: '1px solid rgba(255,255,255,0.06)',
+            borderRadius: '2px',
             cursor: 'pointer',
             textTransform: 'uppercase',
-            letterSpacing: '2px',
-            transition: 'all 0.15s',
+            letterSpacing: '0.1em',
+            transition: 'all 0.2s',
           }}
           onMouseEnter={e => {
-            e.currentTarget.style.borderColor = '#ff4444';
-            e.currentTarget.style.color = '#ff4444';
+            e.currentTarget.style.borderColor = 'rgba(255, 45, 123, 0.4)';
+            e.currentTarget.style.color = 'var(--neon-pink)';
           }}
           onMouseLeave={e => {
-            e.currentTarget.style.borderColor = '#333';
-            e.currentTarget.style.color = '#888';
+            e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)';
+            e.currentTarget.style.color = 'rgba(255,255,255,0.25)';
           }}
         >
           Quit to Menu
@@ -157,12 +176,14 @@ export function PauseMenu({ p1Config, onResume, onQuit }: PauseMenuProps) {
       </div>
 
       <p style={{
-        color: '#444',
-        fontSize: '12px',
-        marginTop: '20px',
-        letterSpacing: '1px',
+        fontFamily: 'var(--font-mono)',
+        color: 'rgba(255,255,255,0.12)',
+        fontSize: '10px',
+        marginTop: '24px',
+        letterSpacing: '0.1em',
+        zIndex: 1,
       }}>
-        Press Escape to resume
+        PRESS ESC TO RESUME
       </p>
     </div>
   );

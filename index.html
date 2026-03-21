@@ -4,10 +4,84 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PromptBrawl</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a1a; }
+      html, body { width: 100%; height: 100%; overflow: hidden; background: #06060f; }
       #root { width: 100%; height: 100%; }
+
+      :root {
+        --font-display: 'Orbitron', sans-serif;
+        --font-body: 'Rajdhani', sans-serif;
+        --font-mono: 'JetBrains Mono', monospace;
+        --neon-blue: #00d4ff;
+        --neon-pink: #ff2d7b;
+        --neon-green: #00ff88;
+        --neon-purple: #b44dff;
+        --bg-deep: #06060f;
+        --bg-card: rgba(10, 10, 25, 0.85);
+        --border-glow: rgba(0, 212, 255, 0.15);
+      }
+
+      @keyframes neon-pulse {
+        0%, 100% { opacity: 1; filter: brightness(1); }
+        50% { opacity: 0.85; filter: brightness(1.3); }
+      }
+      @keyframes glow-border {
+        0%, 100% { border-color: var(--neon-blue); box-shadow: 0 0 15px rgba(0,212,255,0.15), inset 0 0 15px rgba(0,212,255,0.05); }
+        50% { border-color: var(--neon-purple); box-shadow: 0 0 20px rgba(180,77,255,0.2), inset 0 0 20px rgba(180,77,255,0.05); }
+      }
+      @keyframes scanline {
+        0% { transform: translateY(-100%); }
+        100% { transform: translateY(100vh); }
+      }
+      @keyframes text-flicker {
+        0%, 19.999%, 22%, 62.999%, 64%, 64.999%, 70%, 100% { opacity: 1; }
+        20%, 21.999%, 63%, 63.999%, 65%, 69.999% { opacity: 0.33; }
+      }
+      @keyframes slide-up { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+      @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+      @keyframes shimmer {
+        0% { background-position: -200% center; }
+        100% { background-position: 200% center; }
+      }
+      @keyframes scale-in { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: scale(1); } }
+
+      /* Scrollbar */
+      ::-webkit-scrollbar { width: 4px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: rgba(0,212,255,0.3); border-radius: 2px; }
+
+      /* Button base reset */
+      .btn-arcade {
+        font-family: var(--font-display);
+        cursor: pointer;
+        border: none;
+        outline: none;
+        position: relative;
+        overflow: hidden;
+        transition: transform 0.15s, box-shadow 0.2s;
+      }
+      .btn-arcade:hover { transform: scale(1.04); }
+      .btn-arcade:active { transform: scale(0.97); }
+      .btn-arcade::after {
+        content: '';
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: linear-gradient(45deg, transparent, rgba(255,255,255,0.03), transparent);
+        transform: rotate(45deg);
+        transition: 0.5s;
+      }
+      .btn-arcade:hover::after {
+        left: 100%;
+      }
     </style>
   </head>
   <body>

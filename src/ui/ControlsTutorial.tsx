@@ -14,16 +14,17 @@ function KeyBadge({ children }: { children: React.ReactNode }) {
   return (
     <span style={{
       display: 'inline-block',
-      padding: '4px 10px',
-      background: 'rgba(255,255,255,0.08)',
-      border: '1px solid rgba(255,255,255,0.15)',
-      borderRadius: '6px',
-      fontFamily: 'monospace',
-      fontSize: '15px',
+      padding: '5px 12px',
+      background: 'rgba(255,255,255,0.04)',
+      border: '1px solid rgba(255,255,255,0.1)',
+      borderBottom: '2px solid rgba(255,255,255,0.15)',
+      borderRadius: '3px',
+      fontFamily: 'var(--font-mono)',
+      fontSize: '12px',
       fontWeight: 700,
-      color: '#fff',
-      minWidth: '32px',
+      color: 'rgba(255,255,255,0.8)',
       textAlign: 'center',
+      minWidth: '28px',
     }}>
       {children}
     </span>
@@ -31,7 +32,7 @@ function KeyBadge({ children }: { children: React.ReactNode }) {
 }
 
 function ControlRow({ keys, label, detail, accentColor }: {
-  keys: string;
+  keys: React.ReactNode;
   label: string;
   detail?: string;
   accentColor?: string;
@@ -40,20 +41,36 @@ function ControlRow({ keys, label, detail, accentColor }: {
     <div style={{
       display: 'flex',
       alignItems: 'center',
-      gap: '12px',
-      marginBottom: '12px',
+      gap: '16px',
+      marginBottom: '14px',
     }}>
-      <div style={{ width: '80px', textAlign: 'right' }}>
-        <KeyBadge>{keys}</KeyBadge>
+      <div style={{
+        minWidth: '150px',
+        textAlign: 'right',
+        display: 'flex',
+        gap: '4px',
+        justifyContent: 'flex-end',
+        flexWrap: 'wrap',
+      }}>
+        {keys}
       </div>
-      <div>
-        <span style={{ color: '#ddd', fontSize: '14px', fontWeight: 600 }}>{label}</span>
+      <div style={{ borderLeft: '1px solid rgba(255,255,255,0.06)', paddingLeft: '16px' }}>
+        <span style={{
+          fontFamily: 'var(--font-body)',
+          color: '#eee',
+          fontSize: '15px',
+          fontWeight: 700,
+          letterSpacing: '0.02em',
+        }}>
+          {label}
+        </span>
         {detail && (
           <span style={{
-            color: accentColor ?? '#666',
+            fontFamily: 'var(--font-body)',
+            color: accentColor ?? 'rgba(255,255,255,0.3)',
             fontSize: '12px',
-            marginLeft: '8px',
-            fontStyle: 'italic',
+            marginLeft: '10px',
+            fontWeight: 500,
           }}>
             {detail}
           </span>
@@ -110,96 +127,125 @@ export function ControlsTutorial({ p1Config, onStart }: ControlsTutorialProps) {
       flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
-      background: 'linear-gradient(180deg, #0a0a1a 0%, #1a1a3e 100%)',
-      fontFamily: "'Segoe UI', system-ui, sans-serif",
+      background: `
+        radial-gradient(ellipse at 50% 50%, rgba(0, 212, 255, 0.04) 0%, transparent 50%),
+        linear-gradient(180deg, #06060f 0%, #0d0d24 50%, #06060f 100%)
+      `,
+      fontFamily: 'var(--font-body)',
       zIndex: 15,
     }}>
+      {/* Scanline */}
+      <div style={{
+        position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0.3,
+        background: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.15) 2px, rgba(0,0,0,0.15) 4px)',
+      }} />
+
       <h1 style={{
-        fontSize: '36px',
+        fontFamily: 'var(--font-display)',
+        fontSize: '32px',
         fontWeight: 900,
         color: '#fff',
         textTransform: 'uppercase',
-        letterSpacing: '6px',
-        marginBottom: '40px',
-        textShadow: '0 0 30px rgba(68, 136, 255, 0.4)',
+        letterSpacing: '0.15em',
+        marginBottom: '36px',
+        textShadow: '0 0 40px rgba(0, 212, 255, 0.3)',
+        zIndex: 1,
+        animation: 'slide-up 0.4s both',
       }}>
-        How to Fight
+        HOW TO FIGHT
       </h1>
 
-      {/* Keyboard Controls */}
+      {/* Controls Card */}
       <div style={{
-        padding: '24px 36px',
-        background: 'rgba(68, 136, 255, 0.06)',
-        border: `1px solid ${p1Config.color_palette.primary}44`,
-        borderRadius: '16px',
-        minWidth: '320px',
+        padding: '28px 36px',
+        background: 'rgba(0, 212, 255, 0.03)',
+        border: '1px solid rgba(0, 212, 255, 0.1)',
+        borderRadius: '4px',
         marginBottom: '24px',
+        position: 'relative',
+        zIndex: 1,
+        animation: 'scale-in 0.4s 0.1s both',
       }}>
-        <h2 style={{
-          fontSize: '15px',
-          fontWeight: 700,
-          color: '#8888cc',
-          textTransform: 'uppercase',
-          letterSpacing: '3px',
-          marginBottom: '18px',
-          textAlign: 'center',
-        }}>
-          Keyboard
-        </h2>
-        <ControlRow keys="A / D" label="Move" />
-        <ControlRow keys="W" label="Jump" />
-        <ControlRow keys="Space" label="Light Attack" detail="Fast, low damage" />
-        <ControlRow keys="F" label="Heavy Attack" detail="Slow, high damage" />
+        {/* Top accent */}
+        <div style={{
+          position: 'absolute', top: 0, left: '10%', right: '10%', height: '1px',
+          background: 'linear-gradient(90deg, transparent, var(--neon-blue), transparent)',
+          opacity: 0.5,
+        }} />
+
         <ControlRow
-          keys="G"
-          label="Special"
-          detail={p1Special.toUpperCase()}
+          keys={<><KeyBadge>A / D</KeyBadge><span style={{ color: 'rgba(255,255,255,0.15)', fontSize: '11px' }}>or</span><KeyBadge>&larr; / &rarr;</KeyBadge></>}
+          label="Move"
+        />
+        <ControlRow
+          keys={<><KeyBadge>W</KeyBadge><span style={{ color: 'rgba(255,255,255,0.15)', fontSize: '11px' }}>or</span><KeyBadge>&uarr;</KeyBadge></>}
+          label="Jump"
+        />
+        <ControlRow
+          keys={<KeyBadge>Space</KeyBadge>}
+          label="Light Attack"
+          detail="Fast, low damage"
+        />
+        <ControlRow
+          keys={<KeyBadge>F</KeyBadge>}
+          label="Heavy Attack"
+          detail="Slow but devastating"
+        />
+        <ControlRow
+          keys={<KeyBadge>G</KeyBadge>}
+          label={`Special: ${p1Special}`}
+          detail="Unique ability, 5s cooldown"
           accentColor={p1Config.color_palette.accent}
         />
       </div>
 
-      {/* On-screen buttons note */}
       <p style={{
-        color: '#777',
+        fontFamily: 'var(--font-body)',
+        color: 'rgba(255,255,255,0.35)',
         fontSize: '14px',
         marginBottom: '32px',
         textAlign: 'center',
-        maxWidth: '360px',
+        maxWidth: '400px',
         lineHeight: 1.5,
+        zIndex: 1,
+        animation: 'slide-up 0.4s 0.2s both',
       }}>
-        You can also use the <span style={{ color: '#aaa', fontWeight: 600 }}>on-screen buttons</span> at
-        the bottom of the screen for attacks
+        Or click the <span style={{ color: '#fff', fontWeight: 700 }}>buttons at the bottom</span> of the screen
       </p>
 
       <button
         onClick={handleStart}
+        className="btn-arcade"
         style={{
-          padding: '18px 64px',
-          fontSize: '24px',
+          padding: '20px 72px',
+          fontSize: '22px',
           fontWeight: 900,
-          background: 'linear-gradient(135deg, #4488ff, #2244aa)',
+          fontFamily: 'var(--font-display)',
+          background: 'linear-gradient(135deg, rgba(0, 212, 255, 0.2), rgba(180, 77, 255, 0.15))',
           color: '#fff',
-          border: '2px solid #6699ff',
-          borderRadius: '12px',
-          cursor: 'pointer',
+          border: '1px solid rgba(0, 212, 255, 0.3)',
+          borderRadius: '2px',
           textTransform: 'uppercase',
-          letterSpacing: '6px',
-          boxShadow: '0 0 40px rgba(68, 136, 255, 0.3)',
-          transition: 'transform 0.15s',
+          letterSpacing: '0.2em',
+          boxShadow: '0 0 40px rgba(0, 212, 255, 0.15)',
+          zIndex: 1,
+          animation: 'scale-in 0.4s 0.3s both',
+          clipPath: 'polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px))',
         }}
-        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
-        onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
       >
         FIGHT
       </button>
 
       <p style={{
-        color: '#555577',
-        fontSize: '13px',
+        fontFamily: 'var(--font-mono)',
+        color: 'rgba(255,255,255,0.15)',
+        fontSize: '11px',
         marginTop: '16px',
-        letterSpacing: '2px',
+        letterSpacing: '0.1em',
+        zIndex: 1,
+        animation: 'fade-in 0.4s 0.5s both',
       }}>
-        Press Space to start &nbsp;&middot;&nbsp; Auto-start in {countdown}s
+        PRESS SPACE TO START &bull; AUTO-START IN {countdown}s
       </p>
     </div>
   );
