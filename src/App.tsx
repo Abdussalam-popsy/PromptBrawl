@@ -319,7 +319,10 @@ export function App() {
           onHealthChange: (h1, h2) => { setP1Hp(h1); setP2Hp(h2); },
           onSpecialCooldown: (cd1, cd2) => { setP1SpecialCd(cd1); setP2SpecialCd(cd2); },
           onGameOver: (winnerConfig) => {
-            console.log('[GameOver] Winner:', winnerConfig.name, winnerConfig);
+            console.log('[GameOver] Winner:', winnerConfig.name);
+            // Destroy game loop BEFORE screen transition to prevent null refs
+            gameLoopRef.current?.destroy();
+            gameLoopRef.current = null;
             setWinner(winnerConfig);
             setScreen('victory');
           },

@@ -30,6 +30,7 @@ export class GameLoop {
   private ai: AIOpponent | null;
   private multiplayer: MultiplayerSession | null = null;
   private gameOver: boolean = false;
+  private destroyed: boolean = false;
   private paused: boolean = false;
   private callbacks: GameCallbacks;
   private gameContainer: Container;
@@ -168,7 +169,7 @@ export class GameLoop {
   }
 
   private update = (): void => {
-    if (this.gameOver || this.paused) return;
+    if (this.destroyed || this.gameOver || this.paused) return;
 
     const dt = this.app.ticker.deltaTime;
 
@@ -224,26 +225,38 @@ export class GameLoop {
     // Cooldown updates
     this.callbacks.onSpecialCooldown(this.p1.specialCooldown, this.p2.specialCooldown);
 
-    // Check game over
+    // Check game over — stop ticker IMMEDIATELY to prevent null refs
     if (this.p1.state === 'dead') {
       this.gameOver = true;
+      this.app.ticker.stop();
       console.log('[GameLoop] P1 dead, P2 wins:', this.p2.config.name);
       this.callbacks.onGameOver(this.p2.config);
     } else if (this.p2.state === 'dead') {
       this.gameOver = true;
+      this.app.ticker.stop();
       console.log('[GameLoop] P2 dead, P1 wins:', this.p1.config.name);
       this.callbacks.onGameOver(this.p1.config);
     }
   };
 
   destroy(): void {
+    if (this.destroyed) return;
+    this.destroyed = true;
+    this.gameOver = true;
+
+    // 1. Stop ticker FIRST — no more update calls
+    this.app.ticker.stop();
     this.app.ticker.remove(this.update);
+
+    // 2. Clean up event listeners
     this.controls.destroy();
-    this.combat.cleanup();
-    this.gameContainer.destroy({ children: true });
     if (this.resizeHandler) {
       window.removeEventListener('resize', this.resizeHandler);
       this.resizeHandler = null;
     }
+
+    // 3. Clean up game objects last
+    this.combat.cleanup();
+    this.gameContainer.destroy({ children: true });
   }
 }
