@@ -59,8 +59,8 @@ export class GameLoop {
     this.gameContainer.addChild(this.arena.container);
 
     // Fighters — p1 is always left, p2 is always right
-    this.p1 = new Fighter(p1Config, this.arena.p1SpawnX, this.arena.groundY, 1);
-    this.p2 = new Fighter(p2Config, this.arena.p2SpawnX, this.arena.groundY, -1);
+    this.p1 = new Fighter(p1Config, this.arena.p1SpawnX, this.arena.groundY, 1, w, h);
+    this.p2 = new Fighter(p2Config, this.arena.p2SpawnX, this.arena.groundY, -1, w, h);
     this.gameContainer.addChild(this.p1.container);
     this.gameContainer.addChild(this.p2.container);
 
@@ -119,9 +119,15 @@ export class GameLoop {
   private setupMultiplayer(): void {
     if (!this.multiplayer) return;
 
-    // When we receive remote state, apply it to the remote fighter
+    // When we receive remote state, denormalize positions and apply to remote fighter
     this.multiplayer.onState = (state: StateMessage) => {
-      this.remote.setRemoteState(state);
+      this.remote.setRemoteState({
+        ...state,
+        x: state.x * this.arena.width,
+        y: state.y * this.arena.height,
+        vx: state.vx * this.arena.width,
+        vy: state.vy * this.arena.height,
+      });
       this.callbacks.onHealthChange(this.p1.hp, this.p2.hp);
     };
 
@@ -202,10 +208,10 @@ export class GameLoop {
       if (this.syncTimer >= SYNC_RATE_MS) {
         this.syncTimer = 0;
         this.multiplayer.sendState({
-          x: this.local.x,
-          y: this.local.y,
-          vx: this.local.vx,
-          vy: this.local.vy,
+          x: this.local.x / this.arena.width,
+          y: this.local.y / this.arena.height,
+          vx: this.local.vx / this.arena.width,
+          vy: this.local.vy / this.arena.height,
           facing: this.local.facing,
           state: this.local.state,
           hp: this.local.hp,

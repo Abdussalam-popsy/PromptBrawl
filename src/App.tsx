@@ -227,30 +227,6 @@ export function App() {
     setPaused(false);
   }, []);
 
-  // Sync the canvas container to the actual visual viewport (accounts for browser chrome)
-  useEffect(() => {
-    if (screen !== 'fighting') return;
-    const container = canvasRef.current;
-    if (!container) return;
-
-    const syncSize = () => {
-      // visualViewport gives the actual visible area excluding browser chrome
-      const vv = window.visualViewport;
-      const w = vv ? vv.width : window.innerWidth;
-      const h = vv ? vv.height : window.innerHeight;
-      container.style.width = `${w}px`;
-      container.style.height = `${h}px`;
-    };
-
-    syncSize();
-    window.visualViewport?.addEventListener('resize', syncSize);
-    window.addEventListener('resize', syncSize);
-    return () => {
-      window.visualViewport?.removeEventListener('resize', syncSize);
-      window.removeEventListener('resize', syncSize);
-    };
-  }, [screen]);
-
   // Start the game when entering fighting screen
   useEffect(() => {
     if (screen !== 'fighting' || !p1Config || !p2Config) return;
@@ -259,13 +235,6 @@ export function App() {
 
     const initGame = async () => {
       if (!canvasRef.current) return;
-
-      // Ensure container has correct dimensions before PixiJS init
-      const vv = window.visualViewport;
-      const w = vv ? vv.width : window.innerWidth;
-      const h = vv ? vv.height : window.innerHeight;
-      canvasRef.current.style.width = `${w}px`;
-      canvasRef.current.style.height = `${h}px`;
 
       const app = new Application();
       // resizeTo the container div which tracks the visual viewport
@@ -313,8 +282,8 @@ export function App() {
 
   return (
     <div style={{
-      width: '100vw',
-      height: '100vh',
+      width: '100%',
+      height: '100%',
       overflow: 'hidden',
       background: '#06060f',
       position: 'relative',

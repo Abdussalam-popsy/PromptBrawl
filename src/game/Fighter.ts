@@ -72,14 +72,28 @@ export class Fighter {
   // Animation
   private animFrame: number = 0;
   private currentExpression: EyeExpression;
+  private screenScale: number = 1;
 
-  constructor(config: FighterConfig, startX: number, startY: number, facing: 1 | -1) {
+  constructor(config: FighterConfig, startX: number, startY: number, facing: 1 | -1, canvasWidth: number = 800, canvasHeight: number = 600) {
     this.config = config;
     this.x = startX;
     this.y = startY;
     this.facing = facing;
     this.currentExpression = config.eye_expression;
-    this.sizeParams = SIZE_PARAMS[config.size_variant] ?? SIZE_PARAMS.medium;
+    this.screenScale = Math.min(canvasWidth, canvasHeight) / 800;
+    const base = SIZE_PARAMS[config.size_variant] ?? SIZE_PARAMS.medium;
+    this.sizeParams = {
+      headRadius: base.headRadius * this.screenScale,
+      bodyWidth: base.bodyWidth * this.screenScale,
+      bodyHeight: base.bodyHeight * this.screenScale,
+      armWidth: base.armWidth * this.screenScale,
+      armHeight: base.armHeight * this.screenScale,
+      legWidth: base.legWidth * this.screenScale,
+      legHeight: base.legHeight * this.screenScale,
+      weaponWidth: base.weaponWidth * this.screenScale,
+      weaponHeight: base.weaponHeight * this.screenScale,
+      scale: base.scale,
+    };
 
     this.container = new Container();
     this.container.x = startX;
