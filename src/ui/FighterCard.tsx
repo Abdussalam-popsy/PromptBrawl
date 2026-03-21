@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { type FighterConfig } from '../ai/fighterConfig';
 
 interface FighterCardProps {
@@ -5,45 +6,65 @@ interface FighterCardProps {
   onFight: () => void;
 }
 
-function StatBar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
+function StatBar({ label, value, max, color, delay }: { label: string; value: number; max: number; color: string; delay: number }) {
+  const [filled, setFilled] = useState(false);
   const pct = (value / max) * 100;
+
+  useEffect(() => {
+    const timer = setTimeout(() => setFilled(true), delay);
+    return () => clearTimeout(timer);
+  }, [delay]);
+
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
       <span style={{
         fontFamily: 'var(--font-mono)',
-        color: 'rgba(255,255,255,0.4)',
+        color: 'rgba(255,255,255,0.35)',
         fontSize: '10px',
-        width: '52px',
+        width: '36px',
         textTransform: 'uppercase',
         letterSpacing: '0.1em',
+        fontWeight: 700,
       }}>
         {label}
       </span>
       <div style={{
         flex: 1,
-        height: '8px',
-        background: 'rgba(255,255,255,0.08)',
-        borderRadius: '2px',
+        height: '6px',
+        background: 'rgba(255,255,255,0.04)',
+        borderRadius: '3px',
         overflow: 'hidden',
         position: 'relative',
-        border: '1px solid rgba(255,255,255,0.06)',
       }}>
         <div style={{
-          width: `${pct}%`,
+          width: filled ? `${pct}%` : '0%',
           height: '100%',
-          background: `linear-gradient(90deg, ${color}, ${color}cc)`,
-          borderRadius: '2px',
-          transition: 'width 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
-          boxShadow: `0 0 12px ${color}66, inset 0 1px 0 rgba(255,255,255,0.2)`,
-        }} />
+          background: `linear-gradient(90deg, ${color}cc, ${color})`,
+          borderRadius: '3px',
+          transition: 'width 0.8s cubic-bezier(0.16, 1, 0.3, 1)',
+          boxShadow: `0 0 12px ${color}44`,
+          position: 'relative',
+        }}>
+          {/* Shine sweep */}
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: '50%',
+            background: 'linear-gradient(180deg, rgba(255,255,255,0.25), transparent)',
+            borderRadius: '3px 3px 0 0',
+          }} />
+        </div>
       </div>
       <span style={{
         fontFamily: 'var(--font-mono)',
-        color: '#fff',
-        fontSize: '12px',
+        color: color,
+        fontSize: '13px',
         fontWeight: 700,
-        width: '18px',
+        width: '20px',
         textAlign: 'right',
+        textShadow: `0 0 10px ${color}44`,
       }}>
         {value}
       </span>
@@ -52,118 +73,156 @@ function StatBar({ label, value, max, color }: { label: string; value: number; m
 }
 
 export function FighterCard({ config, onFight }: FighterCardProps) {
+  const cardRef = useRef<HTMLDivElement>(null);
   const primary = config.color_palette.primary;
   const accent = config.color_palette.accent;
+  const secondary = config.color_palette.secondary;
 
   return (
-    <div style={{
-      background: 'var(--bg-card)',
-      border: `1px solid ${primary}33`,
-      borderRadius: '4px',
-      padding: '28px 32px',
-      maxWidth: '420px',
-      width: '100%',
-      position: 'relative',
-      overflow: 'hidden',
-      animation: 'scale-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both',
-    }}>
-      {/* Top glow line */}
+    <div
+      ref={cardRef}
+      style={{
+        background: 'rgba(8, 8, 20, 0.95)',
+        border: `1px solid ${primary}30`,
+        borderRadius: '6px',
+        padding: '32px 36px',
+        maxWidth: '440px',
+        width: '100%',
+        position: 'relative',
+        overflow: 'hidden',
+        animation: 'scale-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both',
+        backdropFilter: 'blur(10px)',
+      }}
+    >
+      {/* Animated top gradient line */}
       <div style={{
         position: 'absolute',
         top: 0,
         left: 0,
         right: 0,
         height: '2px',
-        background: `linear-gradient(90deg, transparent, ${primary}, transparent)`,
+        background: `linear-gradient(90deg, transparent, ${primary}, ${accent}, ${secondary}, transparent)`,
+        backgroundSize: '200% 100%',
+        animation: 'border-flow 3s ease-in-out infinite',
       }} />
 
-      {/* Corner accents */}
+      {/* Corner brackets */}
       <div style={{
-        position: 'absolute', top: 0, left: 0, width: '20px', height: '20px',
+        position: 'absolute', top: 0, left: 0, width: '24px', height: '24px',
         borderTop: `2px solid ${primary}`, borderLeft: `2px solid ${primary}`,
+        opacity: 0.7,
       }} />
       <div style={{
-        position: 'absolute', top: 0, right: 0, width: '20px', height: '20px',
+        position: 'absolute', top: 0, right: 0, width: '24px', height: '24px',
         borderTop: `2px solid ${primary}`, borderRight: `2px solid ${primary}`,
+        opacity: 0.7,
+      }} />
+      <div style={{
+        position: 'absolute', bottom: 0, left: 0, width: '24px', height: '24px',
+        borderBottom: `2px solid ${primary}33`, borderLeft: `2px solid ${primary}33`,
+      }} />
+      <div style={{
+        position: 'absolute', bottom: 0, right: 0, width: '24px', height: '24px',
+        borderBottom: `2px solid ${primary}33`, borderRight: `2px solid ${primary}33`,
+      }} />
+
+      {/* Background glow */}
+      <div style={{
+        position: 'absolute',
+        top: '-50%',
+        left: '-25%',
+        width: '150%',
+        height: '150%',
+        background: `radial-gradient(ellipse at 50% 0%, ${primary}08 0%, transparent 60%)`,
+        pointerEvents: 'none',
       }} />
 
       <h2 style={{
         fontFamily: 'var(--font-display)',
-        fontSize: '28px',
+        fontSize: '30px',
         fontWeight: 900,
         color: primary,
         margin: '0 0 4px 0',
         textTransform: 'uppercase',
         letterSpacing: '0.08em',
-        textShadow: `0 0 30px ${primary}44`,
+        textShadow: `0 0 30px ${primary}55, 0 2px 4px rgba(0,0,0,0.5)`,
+        position: 'relative',
       }}>
         {config.name}
       </h2>
 
       <p style={{
         fontFamily: 'var(--font-body)',
-        color: 'rgba(255,255,255,0.4)',
+        color: 'rgba(255,255,255,0.35)',
         fontSize: '15px',
         fontStyle: 'italic',
         fontWeight: 500,
-        margin: '0 0 16px 0',
+        margin: '0 0 18px 0',
+        lineHeight: 1.4,
       }}>
         {config.personality}
       </p>
 
       {/* Tags */}
-      <div style={{ display: 'flex', gap: '6px', marginBottom: '18px' }}>
+      <div style={{ display: 'flex', gap: '6px', marginBottom: '20px', flexWrap: 'wrap' }}>
         <span style={{
           fontFamily: 'var(--font-mono)',
-          padding: '3px 10px',
-          background: `${config.color_palette.secondary}15`,
-          color: config.color_palette.secondary,
+          padding: '4px 12px',
+          background: `${secondary}12`,
+          color: secondary,
           borderRadius: '2px',
           fontSize: '10px',
           textTransform: 'uppercase',
           fontWeight: 700,
           letterSpacing: '0.1em',
-          border: `1px solid ${config.color_palette.secondary}22`,
+          border: `1px solid ${secondary}20`,
         }}>
           {config.size_variant}
         </span>
         <span style={{
           fontFamily: 'var(--font-mono)',
-          padding: '3px 10px',
-          background: `${accent}15`,
+          padding: '4px 12px',
+          background: `${accent}12`,
           color: accent,
           borderRadius: '2px',
           fontSize: '10px',
           textTransform: 'uppercase',
           fontWeight: 700,
           letterSpacing: '0.1em',
-          border: `1px solid ${accent}22`,
+          border: `1px solid ${accent}20`,
         }}>
           {config.eye_expression}
         </span>
       </div>
 
+      {/* Separator */}
+      <div style={{
+        height: '1px',
+        background: `linear-gradient(90deg, transparent, ${primary}20, transparent)`,
+        marginBottom: '16px',
+      }} />
+
       {/* Stats */}
-      <StatBar label="SPD" value={config.stats.speed} max={10} color="#00d4ff" />
-      <StatBar label="DMG" value={config.stats.damage} max={10} color="#ff2d7b" />
-      <StatBar label="DEF" value={config.stats.defense} max={10} color="#00ff88" />
-      <StatBar label="CHS" value={config.stats.chaos} max={10} color="#b44dff" />
+      <StatBar label="SPD" value={config.stats.speed} max={10} color="#00d4ff" delay={200} />
+      <StatBar label="DMG" value={config.stats.damage} max={10} color="#ff2d7b" delay={300} />
+      <StatBar label="DEF" value={config.stats.defense} max={10} color="#00ff88" delay={400} />
+      <StatBar label="CHS" value={config.stats.chaos} max={10} color="#b44dff" delay={500} />
 
       {/* Victory line */}
       <p style={{
         fontFamily: 'var(--font-body)',
-        color: `${accent}cc`,
+        color: `${accent}bb`,
         fontSize: '14px',
         fontStyle: 'italic',
         fontWeight: 500,
-        margin: '18px 0 22px 0',
-        padding: '10px 14px',
-        background: `${accent}08`,
-        borderRadius: '2px',
-        borderLeft: `2px solid ${accent}66`,
-        lineHeight: 1.4,
+        margin: '20px 0 24px 0',
+        padding: '12px 16px',
+        background: `linear-gradient(135deg, ${accent}06, ${primary}04)`,
+        borderRadius: '4px',
+        borderLeft: `2px solid ${accent}55`,
+        lineHeight: 1.5,
       }}>
-        "{config.victory_line}"
+        &ldquo;{config.victory_line}&rdquo;
       </p>
 
       {/* Fight button */}
@@ -172,19 +231,19 @@ export function FighterCard({ config, onFight }: FighterCardProps) {
         className="btn-arcade"
         style={{
           width: '100%',
-          padding: '18px',
+          padding: '20px',
           fontSize: '18px',
           fontWeight: 900,
           fontFamily: 'var(--font-display)',
-          background: `linear-gradient(135deg, ${primary}33, ${config.color_palette.secondary}22)`,
+          background: `linear-gradient(135deg, ${primary}28, ${secondary}18)`,
           color: '#fff',
-          border: `1px solid ${primary}44`,
+          border: `1px solid ${primary}40`,
           borderRadius: '2px',
           textTransform: 'uppercase',
-          letterSpacing: '0.2em',
-          textShadow: `0 0 20px ${primary}66`,
-          boxShadow: `0 0 30px ${primary}11`,
-          clipPath: 'polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px))',
+          letterSpacing: '0.25em',
+          textShadow: `0 0 20px ${primary}55`,
+          boxShadow: `0 0 40px ${primary}11, inset 0 1px 0 rgba(255,255,255,0.05)`,
+          clipPath: 'polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px))',
         }}
       >
         FIGHT

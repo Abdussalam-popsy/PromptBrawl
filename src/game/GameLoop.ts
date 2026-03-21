@@ -52,9 +52,9 @@ export class GameLoop {
     this.gameContainer = new Container();
     this.app.stage.addChild(this.gameContainer);
 
-    // Arena — use window dimensions directly since resizeTo may not have fired yet
-    const w = window.innerWidth;
-    const h = window.innerHeight;
+    // Arena — use the actual renderer dimensions (set by resizeTo: window)
+    const w = this.app.renderer.width;
+    const h = this.app.renderer.height;
     this.arena = new Arena(w, h);
     this.gameContainer.addChild(this.arena.container);
 
@@ -89,14 +89,23 @@ export class GameLoop {
       this.setupMultiplayer();
     }
 
-    // Resize handler — use renderer size (which tracks the container via resizeTo)
+    // Resize handler — update arena AND reposition fighters
     this.resizeHandler = () => {
-      // PixiJS resizeTo handles renderer resize automatically;
-      // we just need to update the arena to match
       const newW = this.app.renderer.width;
       const newH = this.app.renderer.height;
       if (newW !== this.arena.width || newH !== this.arena.height) {
+        const oldW = this.arena.width;
+        const oldH = this.arena.height;
         this.arena.resize(newW, newH);
+
+        // Reposition fighters proportionally to new arena size
+        this.p1.x = (this.p1.x / oldW) * newW;
+        this.p1.y = Math.min(this.p1.y, this.arena.groundY);
+        if (this.p1.grounded) this.p1.y = this.arena.groundY;
+
+        this.p2.x = (this.p2.x / oldW) * newW;
+        this.p2.y = Math.min(this.p2.y, this.arena.groundY);
+        if (this.p2.grounded) this.p2.y = this.arena.groundY;
       }
     };
     window.addEventListener('resize', this.resizeHandler);

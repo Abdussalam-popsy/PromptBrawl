@@ -14,26 +14,26 @@ function getSpecialName(config: FighterConfig): string {
   return def?.name ?? config.move_loadout.special.replace(/_/g, ' ');
 }
 
-function CompactControl({ keys, label }: { keys: string; label: string }) {
+function CompactControl({ keys, label, accent }: { keys: string; label: string; accent?: string }) {
   return (
     <div style={{
       display: 'flex',
       alignItems: 'center',
-      gap: '10px',
-      marginBottom: '8px',
+      gap: '12px',
+      marginBottom: '10px',
     }}>
       <span style={{
         display: 'inline-block',
-        padding: '3px 8px',
+        padding: '4px 10px',
         background: 'rgba(255,255,255,0.04)',
         border: '1px solid rgba(255,255,255,0.08)',
-        borderBottom: '2px solid rgba(255,255,255,0.1)',
-        borderRadius: '2px',
+        borderBottom: '2px solid rgba(255,255,255,0.12)',
+        borderRadius: '3px',
         fontFamily: 'var(--font-mono)',
         fontSize: '10px',
         fontWeight: 700,
-        color: 'rgba(255,255,255,0.5)',
-        minWidth: '28px',
+        color: accent ?? 'rgba(255,255,255,0.5)',
+        minWidth: '36px',
         textAlign: 'center',
       }}>
         {keys}
@@ -42,7 +42,7 @@ function CompactControl({ keys, label }: { keys: string; label: string }) {
         fontFamily: 'var(--font-body)',
         color: 'rgba(255,255,255,0.35)',
         fontSize: '13px',
-        fontWeight: 500,
+        fontWeight: 600,
       }}>
         {label}
       </span>
@@ -71,67 +71,85 @@ export function PauseMenu({ p1Config, onResume, onQuit }: PauseMenuProps) {
       flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
-      background: 'rgba(4, 4, 12, 0.92)',
-      backdropFilter: 'blur(8px)',
+      background: 'rgba(4, 4, 12, 0.94)',
+      backdropFilter: 'blur(12px)',
       fontFamily: 'var(--font-body)',
       zIndex: 25,
       animation: 'fade-in 0.15s both',
     }}>
       {/* Scanline */}
       <div style={{
-        position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0.2,
+        position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0.15,
         background: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.2) 2px, rgba(0,0,0,0.2) 4px)',
       }} />
 
-      <h1 style={{
-        fontFamily: 'var(--font-display)',
-        fontSize: '42px',
-        fontWeight: 900,
-        color: '#fff',
-        textTransform: 'uppercase',
-        letterSpacing: '0.2em',
-        marginBottom: '36px',
-        textShadow: '0 0 40px rgba(0, 212, 255, 0.2)',
-        zIndex: 1,
-      }}>
-        PAUSED
-      </h1>
+      {/* Glitch title */}
+      <div style={{ position: 'relative', marginBottom: '40px', zIndex: 1 }}>
+        <h1 style={{
+          fontFamily: 'var(--font-display)',
+          fontSize: '48px',
+          fontWeight: 900,
+          color: '#fff',
+          textTransform: 'uppercase',
+          letterSpacing: '0.25em',
+          textShadow: '0 0 40px rgba(0, 212, 255, 0.2)',
+          margin: 0,
+        }}>
+          PAUSED
+        </h1>
+        <h1 aria-hidden style={{
+          position: 'absolute', inset: 0, margin: 0,
+          fontFamily: 'var(--font-display)', fontSize: '48px', fontWeight: 900,
+          color: 'var(--neon-blue)', textTransform: 'uppercase', letterSpacing: '0.25em',
+          opacity: 0.3, animation: 'glitch-1 6s infinite linear', pointerEvents: 'none',
+        }}>
+          PAUSED
+        </h1>
+      </div>
 
       {/* Controls reminder */}
       <div style={{
         marginBottom: '36px',
-        padding: '20px 28px',
+        padding: '24px 32px',
         background: 'rgba(255,255,255,0.02)',
-        borderRadius: '4px',
-        border: '1px solid rgba(255,255,255,0.04)',
+        borderRadius: '6px',
+        border: '1px solid rgba(255,255,255,0.05)',
         zIndex: 1,
+        position: 'relative',
       }}>
+        {/* Top accent line */}
+        <div style={{
+          position: 'absolute', top: 0, left: '15%', right: '15%', height: '1px',
+          background: 'linear-gradient(90deg, transparent, var(--neon-blue), transparent)',
+          opacity: 0.3,
+        }} />
+
         <p style={{
           fontFamily: 'var(--font-display)',
           color: 'var(--neon-blue)',
           fontSize: '10px',
           fontWeight: 700,
           textTransform: 'uppercase',
-          letterSpacing: '0.2em',
-          marginBottom: '12px',
-          opacity: 0.6,
+          letterSpacing: '0.25em',
+          marginBottom: '14px',
+          opacity: 0.5,
         }}>
           Controls
         </p>
-        <CompactControl keys="A/D or ???/???" label="Move" />
-        <CompactControl keys="W or ???" label="Jump" />
+        <CompactControl keys="A/D" label="Move Left / Right" />
+        <CompactControl keys="W" label="Jump" />
         <CompactControl keys="Space" label="Light Attack" />
         <CompactControl keys="F" label="Heavy Attack" />
-        <CompactControl keys="G" label={getSpecialName(p1Config)} />
+        <CompactControl keys="G" label={getSpecialName(p1Config)} accent={p1Config.color_palette.accent} />
       </div>
 
       {/* Buttons */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '240px', zIndex: 1 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '260px', zIndex: 1 }}>
         <button
           onClick={onResume}
           className="btn-arcade"
           style={{
-            padding: '16px',
+            padding: '18px',
             fontSize: '16px',
             fontWeight: 700,
             fontFamily: 'var(--font-display)',
@@ -140,7 +158,9 @@ export function PauseMenu({ p1Config, onResume, onQuit }: PauseMenuProps) {
             border: '1px solid rgba(0, 212, 255, 0.25)',
             borderRadius: '2px',
             textTransform: 'uppercase',
-            letterSpacing: '0.15em',
+            letterSpacing: '0.2em',
+            boxShadow: '0 0 20px rgba(0, 212, 255, 0.08)',
+            clipPath: 'polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px))',
           }}
         >
           Resume
@@ -175,16 +195,24 @@ export function PauseMenu({ p1Config, onResume, onQuit }: PauseMenuProps) {
         </button>
       </div>
 
-      <p style={{
-        fontFamily: 'var(--font-mono)',
-        color: 'rgba(255,255,255,0.12)',
-        fontSize: '10px',
-        marginTop: '24px',
-        letterSpacing: '0.1em',
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        marginTop: '28px',
         zIndex: 1,
       }}>
-        PRESS ESC TO RESUME
-      </p>
+        <div style={{ width: '30px', height: '1px', background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.08))' }} />
+        <p style={{
+          fontFamily: 'var(--font-mono)',
+          color: 'rgba(255,255,255,0.1)',
+          fontSize: '10px',
+          letterSpacing: '0.15em',
+        }}>
+          ESC TO RESUME
+        </p>
+        <div style={{ width: '30px', height: '1px', background: 'linear-gradient(90deg, rgba(255,255,255,0.08), transparent)' }} />
+      </div>
     </div>
   );
 }

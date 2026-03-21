@@ -47,6 +47,7 @@ export function PromptInput({ playerNumber, onFighterReady, onBack }: PromptInpu
   }, [handleGenerate]);
 
   const accentColor = playerNumber === 1 ? 'var(--neon-blue)' : 'var(--neon-pink)';
+  const accentHex = playerNumber === 1 ? '#00d4ff' : '#ff2d7b';
 
   if (fighter) {
     return (
@@ -58,8 +59,8 @@ export function PromptInput({ playerNumber, onFighterReady, onBack }: PromptInpu
         alignItems: 'center',
         justifyContent: 'center',
         background: `
-          radial-gradient(ellipse at 50% 30%, rgba(0, 212, 255, 0.04) 0%, transparent 60%),
-          linear-gradient(180deg, #06060f 0%, #0d0d24 50%, #06060f 100%)
+          radial-gradient(ellipse at 50% 30%, ${accentHex}06 0%, transparent 60%),
+          linear-gradient(180deg, #06060f 0%, #0a0a1e 50%, #06060f 100%)
         `,
         zIndex: 10,
         animation: 'fade-in 0.3s both',
@@ -70,8 +71,8 @@ export function PromptInput({ playerNumber, onFighterReady, onBack }: PromptInpu
           fontSize: '12px',
           marginBottom: '20px',
           textTransform: 'uppercase',
-          letterSpacing: '0.3em',
-          opacity: 0.7,
+          letterSpacing: '0.35em',
+          opacity: 0.6,
         }}>
           Player {playerNumber} Fighter
         </p>
@@ -89,16 +90,16 @@ export function PromptInput({ playerNumber, onFighterReady, onBack }: PromptInpu
       alignItems: 'center',
       justifyContent: 'center',
       background: `
-        radial-gradient(ellipse at 50% 40%, rgba(0, 212, 255, 0.05) 0%, transparent 50%),
-        linear-gradient(180deg, #06060f 0%, #0d0d24 50%, #06060f 100%)
+        radial-gradient(ellipse at 50% 40%, ${accentHex}06 0%, transparent 50%),
+        linear-gradient(180deg, #06060f 0%, #0a0a1e 50%, #06060f 100%)
       `,
       fontFamily: 'var(--font-body)',
       zIndex: 10,
     }}>
       {/* Scanline */}
       <div style={{
-        position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0.3,
-        background: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.15) 2px, rgba(0,0,0,0.15) 4px)',
+        position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0.25,
+        background: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.12) 2px, rgba(0,0,0,0.12) 4px)',
       }} />
 
       <button
@@ -112,7 +113,7 @@ export function PromptInput({ playerNumber, onFighterReady, onBack }: PromptInpu
           fontSize: '13px',
           background: 'transparent',
           color: 'rgba(255,255,255,0.3)',
-          border: '1px solid rgba(255,255,255,0.1)',
+          border: '1px solid rgba(255,255,255,0.08)',
           borderRadius: '2px',
           cursor: 'pointer',
           letterSpacing: '0.05em',
@@ -120,11 +121,11 @@ export function PromptInput({ playerNumber, onFighterReady, onBack }: PromptInpu
           zIndex: 1,
         }}
         onMouseEnter={e => {
-          e.currentTarget.style.borderColor = 'rgba(0, 212, 255, 0.4)';
-          e.currentTarget.style.color = 'var(--neon-blue)';
+          e.currentTarget.style.borderColor = `${accentHex}55`;
+          e.currentTarget.style.color = accentColor;
         }}
         onMouseLeave={e => {
-          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)';
+          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
           e.currentTarget.style.color = 'rgba(255,255,255,0.3)';
         }}
       >
@@ -137,37 +138,50 @@ export function PromptInput({ playerNumber, onFighterReady, onBack }: PromptInpu
           fontSize: '12px',
           color: accentColor,
           textTransform: 'uppercase',
-          letterSpacing: '0.4em',
+          letterSpacing: '0.45em',
           marginBottom: '12px',
-          opacity: 0.7,
+          opacity: 0.6,
         }}>
           Player {playerNumber}
         </p>
 
         <h1 style={{
           fontFamily: 'var(--font-display)',
-          fontSize: 'clamp(28px, 5vw, 40px)',
+          fontSize: 'clamp(26px, 5vw, 40px)',
           fontWeight: 900,
           color: '#fff',
-          marginBottom: '36px',
-          letterSpacing: '0.05em',
-          textShadow: '0 0 40px rgba(0, 212, 255, 0.15)',
+          marginBottom: '12px',
+          letterSpacing: '0.06em',
+          textShadow: `0 0 40px ${accentHex}18`,
         }}>
           DESCRIBE YOUR FIGHTER
         </h1>
 
+        {/* Decorative line */}
+        <div style={{
+          width: '160px',
+          height: '1px',
+          background: `linear-gradient(90deg, transparent, ${accentHex}, transparent)`,
+          marginBottom: '36px',
+          opacity: 0.35,
+          animation: 'crack-in 0.5s 0.1s both',
+        }} />
+
         <div style={{ width: '100%', maxWidth: '520px', padding: '0 20px' }}>
           <div style={{
             position: 'relative',
-            border: '1px solid rgba(0, 212, 255, 0.15)',
-            borderRadius: '4px',
-            background: 'rgba(0, 212, 255, 0.03)',
+            border: `1px solid ${accentHex}18`,
+            borderRadius: '6px',
+            background: `${accentHex}04`,
             overflow: 'hidden',
+            transition: 'border-color 0.3s, box-shadow 0.3s',
           }}>
-            {/* Top accent line */}
+            {/* Animated top accent line */}
             <div style={{
               height: '2px',
-              background: `linear-gradient(90deg, transparent, ${accentColor}, transparent)`,
+              background: `linear-gradient(90deg, transparent, ${accentHex}, transparent)`,
+              backgroundSize: '200% 100%',
+              animation: 'border-flow 3s ease-in-out infinite',
               opacity: 0.5,
             }} />
             <textarea
@@ -179,7 +193,7 @@ export function PromptInput({ playerNumber, onFighterReady, onBack }: PromptInpu
               rows={3}
               style={{
                 width: '100%',
-                padding: '20px 22px',
+                padding: '22px 24px',
                 fontSize: '17px',
                 fontFamily: 'var(--font-body)',
                 fontWeight: 500,
@@ -202,25 +216,35 @@ export function PromptInput({ playerNumber, onFighterReady, onBack }: PromptInpu
             style={{
               width: '100%',
               marginTop: '16px',
-              padding: '18px',
+              padding: '20px',
               fontSize: '16px',
               fontWeight: 700,
               fontFamily: 'var(--font-display)',
               background: loading
-                ? 'rgba(255,255,255,0.05)'
-                : `linear-gradient(135deg, rgba(0, 212, 255, 0.2), rgba(180, 77, 255, 0.15))`,
+                ? 'rgba(255,255,255,0.04)'
+                : `linear-gradient(135deg, ${accentHex}20, rgba(180, 77, 255, 0.12))`,
               color: loading ? 'rgba(255,255,255,0.4)' : '#fff',
-              border: loading ? '1px solid rgba(255,255,255,0.05)' : '1px solid rgba(0, 212, 255, 0.2)',
-              borderRadius: '4px',
+              border: loading ? '1px solid rgba(255,255,255,0.05)' : `1px solid ${accentHex}25`,
+              borderRadius: '2px',
               textTransform: 'uppercase',
-              letterSpacing: '0.2em',
+              letterSpacing: '0.25em',
               opacity: !prompt.trim() ? 0.4 : 1,
               transition: 'opacity 0.2s, background 0.3s',
-              clipPath: 'polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px))',
+              boxShadow: loading || !prompt.trim() ? 'none' : `0 0 30px ${accentHex}10`,
+              clipPath: 'polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px))',
             }}
           >
             {loading ? (
-              <span style={{ animation: 'neon-pulse 1s infinite' }}>
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
+                <span style={{
+                  display: 'inline-block',
+                  width: '14px',
+                  height: '14px',
+                  border: '2px solid rgba(255,255,255,0.15)',
+                  borderTopColor: 'rgba(255,255,255,0.5)',
+                  borderRadius: '50%',
+                  animation: 'spin 0.6s linear infinite',
+                }} />
                 SUMMONING FIGHTER...
               </span>
             ) : (

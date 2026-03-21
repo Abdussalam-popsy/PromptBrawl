@@ -29,6 +29,7 @@ function HealthBar({
   const critical = pct <= 30;
   const barColor = critical ? '#ff2244' : config.color_palette.primary;
   const specialReady = specialCd <= 0;
+  const specialPct = specialCd > 0 ? Math.max(0, 100 - (specialCd / 5000) * 100) : 100;
 
   return (
     <div style={{
@@ -41,12 +42,12 @@ function HealthBar({
       {label && (
         <span style={{
           fontFamily: 'var(--font-mono)',
-          color: 'rgba(255,255,255,0.3)',
+          color: 'rgba(255,255,255,0.25)',
           fontSize: '9px',
           fontWeight: 700,
           textTransform: 'uppercase',
           letterSpacing: '0.15em',
-          marginBottom: '2px',
+          marginBottom: '3px',
         }}>
           {label}
         </span>
@@ -71,38 +72,72 @@ function HealthBar({
         }}>
           {config.name}
         </span>
-        {specialReady && (
+        {specialReady ? (
           <span style={{
             fontFamily: 'var(--font-mono)',
             color: config.color_palette.accent,
             fontSize: '9px',
             fontWeight: 700,
-            padding: '2px 6px',
+            padding: '2px 8px',
             background: `${config.color_palette.accent}18`,
             border: `1px solid ${config.color_palette.accent}33`,
             borderRadius: '2px',
             textTransform: 'uppercase',
-            letterSpacing: '0.1em',
-            animation: 'neon-pulse 2s ease-in-out infinite',
+            letterSpacing: '0.12em',
+            animation: 'neon-pulse 1.5s ease-in-out infinite',
+            boxShadow: `0 0 10px ${config.color_palette.accent}22`,
           }}>
-            SP
+            SP READY
           </span>
+        ) : (
+          <div style={{
+            width: '32px',
+            height: '4px',
+            background: 'rgba(255,255,255,0.06)',
+            borderRadius: '2px',
+            overflow: 'hidden',
+          }}>
+            <div style={{
+              width: `${specialPct}%`,
+              height: '100%',
+              background: config.color_palette.accent,
+              borderRadius: '2px',
+              transition: 'width 0.3s linear',
+              opacity: 0.5,
+            }} />
+          </div>
         )}
       </div>
 
       {/* Health bar */}
       <div style={{
         width: '100%',
-        height: '20px',
-        background: 'rgba(0,0,0,0.7)',
+        height: '22px',
+        background: 'rgba(0,0,0,0.75)',
         borderRadius: '2px',
         overflow: 'hidden',
         border: critical
-          ? '1px solid rgba(255, 34, 68, 0.4)'
+          ? '1px solid rgba(255, 34, 68, 0.5)'
           : '1px solid rgba(255,255,255,0.06)',
         position: 'relative',
-        boxShadow: critical ? '0 0 15px rgba(255, 34, 68, 0.2)' : 'none',
+        boxShadow: critical
+          ? '0 0 20px rgba(255, 34, 68, 0.25), inset 0 0 8px rgba(255, 34, 68, 0.1)'
+          : `inset 0 0 6px rgba(0,0,0,0.5)`,
       }}>
+        {/* Damage trail (slightly brighter, delayed transition) */}
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          [align]: 0,
+          width: `${pct + 2}%`,
+          height: '100%',
+          background: critical
+            ? 'rgba(255, 68, 100, 0.15)'
+            : `${barColor}15`,
+          transition: 'width 0.8s ease-out',
+        }} />
+
+        {/* Main health fill */}
         <div style={{
           position: 'absolute',
           top: 0,
@@ -114,7 +149,17 @@ function HealthBar({
             : `linear-gradient(180deg, ${barColor}dd, ${barColor}88)`,
           transition: 'width 0.3s ease-out',
           boxShadow: critical ? '0 0 12px rgba(255, 34, 68, 0.5)' : `0 0 8px ${barColor}33`,
+          ...(critical ? { animation: 'health-flash 1s ease-in-out infinite' } : {}),
         }} />
+
+        {/* Segmented overlay */}
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          background: `repeating-linear-gradient(${align === 'left' ? '90deg' : '270deg'}, transparent, transparent 9.8%, rgba(0,0,0,0.2) 9.8%, rgba(0,0,0,0.2) 10%)`,
+          pointerEvents: 'none',
+        }} />
+
         {/* Glass reflection */}
         <div style={{
           position: 'absolute',
@@ -122,9 +167,11 @@ function HealthBar({
           left: 0,
           right: 0,
           height: '40%',
-          background: 'linear-gradient(180deg, rgba(255,255,255,0.08), transparent)',
+          background: 'linear-gradient(180deg, rgba(255,255,255,0.1), transparent)',
           pointerEvents: 'none',
         }} />
+
+        {/* HP number */}
         <span style={{
           position: 'absolute',
           top: '50%',
@@ -132,9 +179,9 @@ function HealthBar({
           transform: 'translate(-50%, -50%)',
           fontFamily: 'var(--font-mono)',
           color: '#fff',
-          fontSize: '10px',
+          fontSize: '11px',
           fontWeight: 700,
-          textShadow: '0 1px 3px rgba(0,0,0,0.9)',
+          textShadow: '0 1px 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.5)',
           letterSpacing: '0.05em',
         }}>
           {displayHp}
@@ -157,19 +204,25 @@ export function HUD({ p1Config, p2Config, p1Hp, p2Hp, p1SpecialCd, p2SpecialCd, 
       alignItems: 'flex-start',
       pointerEvents: 'none',
       zIndex: 5,
-      background: 'linear-gradient(180deg, rgba(0,0,0,0.5) 0%, transparent 100%)',
+      background: 'linear-gradient(180deg, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.2) 70%, transparent 100%)',
     }}>
       <HealthBar config={p1Config} hp={p1Hp} specialCd={p1SpecialCd} align="left" label={p1Label} />
-      <span style={{
-        fontFamily: 'var(--font-display)',
-        color: 'rgba(255,255,255,0.15)',
-        fontSize: '16px',
-        fontWeight: 700,
-        marginTop: '18px',
-        letterSpacing: '0.1em',
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        marginTop: '14px',
       }}>
-        VS
-      </span>
+        <span style={{
+          fontFamily: 'var(--font-display)',
+          color: 'rgba(255,255,255,0.12)',
+          fontSize: '16px',
+          fontWeight: 700,
+          letterSpacing: '0.15em',
+        }}>
+          VS
+        </span>
+      </div>
       <HealthBar config={p2Config} hp={p2Hp} specialCd={p2SpecialCd} align="right" label={p2Label} />
     </div>
   );

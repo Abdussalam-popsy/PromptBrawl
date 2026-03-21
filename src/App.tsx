@@ -227,6 +227,30 @@ export function App() {
     setPaused(false);
   }, []);
 
+  // Sync the canvas container to the actual visual viewport (accounts for browser chrome)
+  useEffect(() => {
+    if (screen !== 'fighting') return;
+    const container = canvasRef.current;
+    if (!container) return;
+
+    const syncSize = () => {
+      // visualViewport gives the actual visible area excluding browser chrome
+      const vv = window.visualViewport;
+      const w = vv ? vv.width : window.innerWidth;
+      const h = vv ? vv.height : window.innerHeight;
+      container.style.width = `${w}px`;
+      container.style.height = `${h}px`;
+    };
+
+    syncSize();
+    window.visualViewport?.addEventListener('resize', syncSize);
+    window.addEventListener('resize', syncSize);
+    return () => {
+      window.visualViewport?.removeEventListener('resize', syncSize);
+      window.removeEventListener('resize', syncSize);
+    };
+  }, [screen]);
+
   // Start the game when entering fighting screen
   useEffect(() => {
     if (screen !== 'fighting' || !p1Config || !p2Config) return;
@@ -236,8 +260,15 @@ export function App() {
     const initGame = async () => {
       if (!canvasRef.current) return;
 
+      // Ensure container has correct dimensions before PixiJS init
+      const vv = window.visualViewport;
+      const w = vv ? vv.width : window.innerWidth;
+      const h = vv ? vv.height : window.innerHeight;
+      canvasRef.current.style.width = `${w}px`;
+      canvasRef.current.style.height = `${h}px`;
+
       const app = new Application();
-      // On mobile stacked layout, resize to the container div, not the window
+      // resizeTo the container div which tracks the visual viewport
       await app.init({
         background: '#0a0a1a',
         resizeTo: canvasRef.current,
@@ -276,24 +307,9 @@ export function App() {
     gameLoopRef.current?.triggerButton(action);
   }, []);
 
-  const handleDpadDown = useCallback((direction: 'left' | 'right') => {
-    gameLoopRef.current?.controls.setTouchDirection(direction, true);
-  }, []);
-
-  const handleDpadUp = useCallback((direction: 'left' | 'right') => {
-    gameLoopRef.current?.controls.setTouchDirection(direction, false);
-  }, []);
-
-  const handleJumpButton = useCallback(() => {
-    gameLoopRef.current?.triggerButton('jump');
-  }, []);
-
   // Determine special info for the local player's fighter
   const localConfig = isHost ? p1Config : p2Config;
   const localSpecialCd = isHost ? p1SpecialCd : p2SpecialCd;
-
-  // Phone = narrow portrait screen. Tablet/desktop unchanged.
-  const isPhone = typeof window !== 'undefined' && window.innerWidth < 640;
 
   return (
     <div style={{
@@ -302,25 +318,9 @@ export function App() {
       overflow: 'hidden',
       background: '#06060f',
       position: 'relative',
-      ...(screen === 'fighting' && isPhone ? {
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-      } : {}),
     }}>
-      {/* PixiJS canvas container — on phone: 16:9 centered box; else: fullscreen */}
-      <div ref={canvasRef} style={
-        screen === 'fighting' && isPhone
-          ? {
-              width: '100%',
-              // 16:9 aspect ratio
-              aspectRatio: '16 / 9',
-              flexShrink: 0,
-              position: 'relative',
-            }
-          : { position: 'absolute', inset: 0 }
-      } />
+      {/* PixiJS canvas container — always fullscreen */}
+      <div ref={canvasRef} style={{ position: 'absolute', inset: 0 }} />
 
       {/* UI Overlays */}
       {screen === 'modeSelect' && (
@@ -438,7 +438,7 @@ export function App() {
             p2Label={mode === 'vsOnline' ? 'P2 · GUEST' : undefined}
           />
 
-          {/* Controls strip — fixed bottom on mobile, overlaid on desktop */}
+          {/* On-screen attack buttons — desktop/tablet overlay at bottom */}
           {!paused && !peerDisconnected && (() => {
             const specialName = localConfig
               ? (SPECIAL_DEFS[localConfig.move_loadout.special]?.name ?? localConfig.move_loadout.special.replace(/_/g, ' '))
@@ -448,23 +448,9 @@ export function App() {
             const accentColor = localConfig?.color_palette.accent ?? '#b44dff';
             const primaryColor = localConfig?.color_palette.primary ?? '#00d4ff';
 
-            const dpadBtn: React.CSSProperties = {
-              width: isPhone ? '64px' : '80px',
-              height: isPhone ? '50px' : '60px',
-              background: 'rgba(255,255,255,0.08)',
-              border: '1px solid rgba(255,255,255,0.12)',
-              borderRadius: '6px',
-              color: 'rgba(255,255,255,0.5)',
-              fontSize: isPhone ? '20px' : '24px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              touchAction: 'manipulation',
-              WebkitTapHighlightColor: 'transparent',
-              cursor: 'pointer',
-            };
-
             const atkBtn: React.CSSProperties = {
-              minHeight: isPhone ? '50px' : '80px',
-              minWidth: isPhone ? '60px' : '80px',
+              minHeight: '80px',
+              minWidth: '80px',
               fontFamily: 'var(--font-display)',
               fontWeight: 700,
               borderRadius: '6px',
@@ -476,73 +462,22 @@ export function App() {
               alignItems: 'center',
               justifyContent: 'center',
               gap: '2px',
-              padding: isPhone ? '0 10px' : '0 16px',
+              padding: '0 16px',
             };
 
             return (
-              <div style={
-                isPhone
-                  ? {
-                      // Controls in the black bar below the 16:9 game
-                      width: '100%',
-                      flex: 1,
-                      background: '#06060f',
-                      borderTop: '1px solid rgba(255,255,255,0.06)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '8px 16px',
-                      zIndex: 6,
-                      userSelect: 'none',
-                      minHeight: 0,
-                    }
-                  : {
-                      // Desktop: overlaid at bottom
-                      position: 'absolute',
-                      bottom: '20px',
-                      left: '20px',
-                      right: '20px',
-                      display: 'flex',
-                      alignItems: 'flex-end',
-                      justifyContent: 'space-between',
-                      zIndex: 6,
-                      userSelect: 'none',
-                      pointerEvents: 'none',
-                    }
-              }>
-                {/* D-pad — left side */}
-                <div style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: '4px',
-                  pointerEvents: 'auto',
-                }}>
-                  <button onPointerDown={(e) => { e.preventDefault(); handleJumpButton(); }} style={dpadBtn}>
-                    &#9650;
-                  </button>
-                  <div style={{ display: 'flex', gap: '4px' }}>
-                    <button
-                      onPointerDown={(e) => { e.preventDefault(); handleDpadDown('left'); }}
-                      onPointerUp={() => handleDpadUp('left')}
-                      onPointerLeave={() => handleDpadUp('left')}
-                      onPointerCancel={() => handleDpadUp('left')}
-                      style={dpadBtn}
-                    >
-                      &#9664;
-                    </button>
-                    <button
-                      onPointerDown={(e) => { e.preventDefault(); handleDpadDown('right'); }}
-                      onPointerUp={() => handleDpadUp('right')}
-                      onPointerLeave={() => handleDpadUp('right')}
-                      onPointerCancel={() => handleDpadUp('right')}
-                      style={dpadBtn}
-                    >
-                      &#9654;
-                    </button>
-                  </div>
-                </div>
-
+              <div style={{
+                position: 'absolute',
+                bottom: '20px',
+                left: '20px',
+                right: '20px',
+                display: 'flex',
+                alignItems: 'flex-end',
+                justifyContent: 'flex-end',
+                zIndex: 6,
+                userSelect: 'none',
+                pointerEvents: 'none',
+              }}>
                 {/* Attack buttons — right side */}
                 <div style={{ display: 'flex', gap: '6px', pointerEvents: 'auto' }}>
                   <button
@@ -555,8 +490,8 @@ export function App() {
                       boxShadow: '0 0 15px rgba(0, 212, 255, 0.1)',
                     }}
                   >
-                    <span style={{ fontSize: isPhone ? '16px' : '20px', lineHeight: 1, opacity: 0.8 }}>&#9876;</span>
-                    <span style={{ letterSpacing: '0.1em', textTransform: 'uppercase', fontSize: isPhone ? '9px' : '11px' }}>ATK</span>
+                    <span style={{ fontSize: '20px', lineHeight: 1, opacity: 0.8 }}>&#9876;</span>
+                    <span style={{ letterSpacing: '0.1em', textTransform: 'uppercase', fontSize: '11px' }}>ATK</span>
                   </button>
 
                   <button
@@ -569,8 +504,8 @@ export function App() {
                       boxShadow: '0 0 15px rgba(255, 136, 0, 0.1)',
                     }}
                   >
-                    <span style={{ fontSize: isPhone ? '16px' : '20px', lineHeight: 1, opacity: 0.8 }}>&#128165;</span>
-                    <span style={{ letterSpacing: '0.1em', textTransform: 'uppercase', fontSize: isPhone ? '9px' : '11px' }}>HVY</span>
+                    <span style={{ fontSize: '20px', lineHeight: 1, opacity: 0.8 }}>&#128165;</span>
+                    <span style={{ letterSpacing: '0.1em', textTransform: 'uppercase', fontSize: '11px' }}>HVY</span>
                   </button>
 
                   <button
@@ -588,8 +523,8 @@ export function App() {
                       boxShadow: onCooldown ? 'none' : `0 0 15px ${accentColor}15`,
                     }}
                   >
-                    <span style={{ fontSize: isPhone ? '14px' : '18px', lineHeight: 1, opacity: 0.8 }}>{onCooldown ? '\u23F3' : '\u2728'}</span>
-                    <span style={{ letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: isPhone ? '8px' : '10px' }}>
+                    <span style={{ fontSize: '18px', lineHeight: 1, opacity: 0.8 }}>{onCooldown ? '\u23F3' : '\u2728'}</span>
+                    <span style={{ letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: '10px' }}>
                       {onCooldown ? `${cooldownSec}s` : specialName}
                     </span>
                   </button>

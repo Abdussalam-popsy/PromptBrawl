@@ -34,55 +34,68 @@ export function VictoryScreen({ winner, onPlayAgain }: VictoryScreenProps) {
   const accent = winner.color_palette.accent;
 
   useEffect(() => {
+    // Content entrance animation
+    try {
+      if (contentRef.current) {
+        gsap.from(contentRef.current.children, {
+          y: 40,
+          opacity: 0,
+          duration: 0.7,
+          stagger: 0.12,
+          ease: 'power3.out',
+        });
+      }
+    } catch { /* GSAP failure won't block */ }
+
     // Confetti burst
     try {
       if (confettiRef.current) {
         const container = confettiRef.current;
         const colors = [primary, secondary, accent, '#ffffff', '#ffdd44', '#ff66aa', '#00ff88'];
 
-        for (let i = 0; i < 100; i++) {
+        for (let i = 0; i < 120; i++) {
           const piece = document.createElement('div');
-          const size = 4 + Math.random() * 10;
-          const isCircle = Math.random() > 0.5;
+          const size = 3 + Math.random() * 10;
+          const isCircle = Math.random() > 0.6;
+          const isStar = !isCircle && Math.random() > 0.5;
           const color = colors[Math.floor(Math.random() * colors.length)];
           piece.style.cssText = `
             position: absolute;
             width: ${size}px;
-            height: ${isCircle ? size : size * 0.35}px;
+            height: ${isCircle ? size : isStar ? size : size * 0.3}px;
             background: ${color};
-            border-radius: ${isCircle ? '50%' : '1px'};
-            left: ${30 + Math.random() * 40}%;
-            top: 40%;
+            border-radius: ${isCircle ? '50%' : isStar ? '1px' : '1px'};
+            left: ${35 + Math.random() * 30}%;
+            top: 45%;
             pointer-events: none;
             opacity: 0;
+            box-shadow: 0 0 ${4 + Math.random() * 6}px ${color}88;
           `;
           container.appendChild(piece);
 
           const angle = Math.random() * Math.PI * 2;
-          const distance = 150 + Math.random() * 500;
+          const distance = 200 + Math.random() * 600;
 
           gsap.to(piece, {
             x: Math.cos(angle) * distance,
             y: Math.sin(angle) * distance + Math.random() * 300,
             rotation: Math.random() * 1080 - 540,
             opacity: 1,
-            duration: 0.4,
-            delay: Math.random() * 0.4,
+            duration: 0.5,
+            delay: Math.random() * 0.5,
             ease: 'power2.out',
           });
 
           gsap.to(piece, {
             opacity: 0,
-            duration: 1.2,
-            delay: 1.5 + Math.random() * 2,
+            duration: 1.5,
+            delay: 1.8 + Math.random() * 2,
             ease: 'power1.in',
             onComplete: () => piece.remove(),
           });
         }
       }
-    } catch {
-      // GSAP failure won't block the screen
-    }
+    } catch { /* GSAP failure won't block */ }
   }, [winner, primary, secondary, accent]);
 
   return (
@@ -94,7 +107,7 @@ export function VictoryScreen({ winner, onPlayAgain }: VictoryScreenProps) {
       alignItems: 'center',
       justifyContent: 'center',
       background: `
-        radial-gradient(ellipse at center, ${lighten(primary, 0.2)} 0%, ${primary}88 30%, #0d0d24 70%, #06060f 100%)
+        radial-gradient(ellipse at center, ${primary}33 0%, ${primary}11 25%, #0d0d24 65%, #06060f 100%)
       `,
       zIndex: 20,
       fontFamily: 'var(--font-body)',
@@ -102,9 +115,24 @@ export function VictoryScreen({ winner, onPlayAgain }: VictoryScreenProps) {
     }}>
       {/* Scanline */}
       <div style={{
-        position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0.2,
+        position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0.15,
         background: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.15) 2px, rgba(0,0,0,0.15) 4px)',
       }} />
+
+      {/* Pulse rings */}
+      {[0, 0.5, 1, 1.5].map((delay, i) => (
+        <div key={i} style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          width: '200px',
+          height: '200px',
+          borderRadius: '50%',
+          border: `1px solid ${primary}33`,
+          animation: `pulse-ring 3s ${delay}s ease-out infinite`,
+          pointerEvents: 'none',
+        }} />
+      ))}
 
       {/* Confetti container */}
       <div
@@ -115,10 +143,10 @@ export function VictoryScreen({ winner, onPlayAgain }: VictoryScreenProps) {
       {/* Radial glow */}
       <div style={{
         position: 'absolute',
-        width: '800px',
-        height: '800px',
+        width: '900px',
+        height: '900px',
         borderRadius: '50%',
-        background: `radial-gradient(circle, ${primary}22 0%, transparent 60%)`,
+        background: `radial-gradient(circle, ${primary}18 0%, transparent 55%)`,
         top: '50%',
         left: '50%',
         transform: 'translate(-50%, -50%)',
@@ -127,30 +155,48 @@ export function VictoryScreen({ winner, onPlayAgain }: VictoryScreenProps) {
       }} />
 
       <div ref={contentRef} style={{ zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        {/* WINNER label */}
+        {/* Crown / WINNER label */}
+        <div style={{
+          fontSize: '40px',
+          marginBottom: '8px',
+          animation: 'float 3s ease-in-out infinite',
+          filter: `drop-shadow(0 0 20px ${primary}66)`,
+        }}>
+          &#x1F451;
+        </div>
+
         <p style={{
           fontFamily: 'var(--font-display)',
-          fontSize: '20px',
+          fontSize: '18px',
           fontWeight: 700,
-          color: 'rgba(255,255,255,0.8)',
+          color: 'rgba(255,255,255,0.7)',
           textTransform: 'uppercase',
-          letterSpacing: '0.4em',
-          marginBottom: '8px',
+          letterSpacing: '0.5em',
+          marginBottom: '12px',
           textShadow: '0 2px 10px rgba(0,0,0,0.6)',
-          animation: 'slide-up 0.5s both',
         }}>
           WINNER
         </p>
 
+        {/* Decorative line */}
+        <div style={{
+          width: 'clamp(120px, 30vw, 300px)',
+          height: '1px',
+          background: `linear-gradient(90deg, transparent, ${primary}, transparent)`,
+          marginBottom: '16px',
+          opacity: 0.6,
+          animation: 'crack-in 0.6s 0.3s both',
+        }} />
+
         {/* Fighter name */}
         <h1 style={{
           fontFamily: 'var(--font-display)',
-          fontSize: 'clamp(48px, 10vw, 88px)',
+          fontSize: 'clamp(44px, 10vw, 92px)',
           fontWeight: 900,
           color: '#fff',
           textTransform: 'uppercase',
           letterSpacing: '0.06em',
-          margin: '0 0 24px 0',
+          margin: '0 0 20px 0',
           textAlign: 'center',
           textShadow: `
             0 0 60px ${primary}66,
@@ -159,30 +205,28 @@ export function VictoryScreen({ winner, onPlayAgain }: VictoryScreenProps) {
           `,
           lineHeight: 1.1,
           padding: '0 20px',
-          animation: 'scale-in 0.6s 0.1s both',
         }}>
           {winner.name}
         </h1>
 
         {/* Victory line */}
         <p style={{
-          color: 'rgba(255,255,255,0.85)',
+          color: 'rgba(255,255,255,0.8)',
           fontFamily: 'var(--font-body)',
-          fontSize: 'clamp(16px, 3vw, 24px)',
+          fontSize: 'clamp(16px, 3vw, 22px)',
           fontStyle: 'italic',
           fontWeight: 600,
           maxWidth: '560px',
           textAlign: 'center',
           lineHeight: 1.5,
-          margin: '0 0 48px 0',
-          padding: '14px 24px',
-          background: 'rgba(0,0,0,0.3)',
-          borderRadius: '4px',
-          borderLeft: `2px solid ${accent}88`,
-          borderRight: `2px solid ${accent}88`,
+          margin: '0 0 44px 0',
+          padding: '16px 28px',
+          background: 'rgba(0,0,0,0.35)',
+          borderRadius: '6px',
+          borderLeft: `3px solid ${accent}88`,
+          borderRight: `3px solid ${accent}88`,
           textShadow: '0 2px 6px rgba(0,0,0,0.5)',
-          backdropFilter: 'blur(4px)',
-          animation: 'slide-up 0.5s 0.3s both',
+          backdropFilter: 'blur(6px)',
         }}>
           &ldquo;{winner.victory_line}&rdquo;
         </p>
@@ -192,7 +236,7 @@ export function VictoryScreen({ winner, onPlayAgain }: VictoryScreenProps) {
           onClick={onPlayAgain}
           className="btn-arcade"
           style={{
-            padding: '20px 64px',
+            padding: '22px 72px',
             fontSize: '18px',
             fontWeight: 900,
             fontFamily: 'var(--font-display)',
@@ -201,10 +245,9 @@ export function VictoryScreen({ winner, onPlayAgain }: VictoryScreenProps) {
             border: 'none',
             borderRadius: '2px',
             textTransform: 'uppercase',
-            letterSpacing: '0.2em',
-            boxShadow: `0 0 40px rgba(255,255,255,0.15), 0 8px 30px rgba(0,0,0,0.3)`,
-            animation: 'scale-in 0.4s 0.5s both',
-            clipPath: 'polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px))',
+            letterSpacing: '0.25em',
+            boxShadow: `0 0 50px rgba(255,255,255,0.15), 0 8px 30px rgba(0,0,0,0.3), 0 0 80px ${primary}22`,
+            clipPath: 'polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px))',
           }}
         >
           PLAY AGAIN
