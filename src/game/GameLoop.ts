@@ -89,12 +89,15 @@ export class GameLoop {
       this.setupMultiplayer();
     }
 
-    // Resize handler
+    // Resize handler — use renderer size (which tracks the container via resizeTo)
     this.resizeHandler = () => {
-      const newW = window.innerWidth;
-      const newH = window.innerHeight;
-      this.app.renderer.resize(newW, newH);
-      this.arena.resize(newW, newH);
+      // PixiJS resizeTo handles renderer resize automatically;
+      // we just need to update the arena to match
+      const newW = this.app.renderer.width;
+      const newH = this.app.renderer.height;
+      if (newW !== this.arena.width || newH !== this.arena.height) {
+        this.arena.resize(newW, newH);
+      }
     };
     window.addEventListener('resize', this.resizeHandler);
 

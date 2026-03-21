@@ -234,15 +234,18 @@ export function App() {
     let mounted = true;
 
     const initGame = async () => {
+      if (!canvasRef.current) return;
+
       const app = new Application();
+      // On mobile stacked layout, resize to the container div, not the window
       await app.init({
         background: '#0a0a1a',
-        resizeTo: window,
+        resizeTo: canvasRef.current,
         antialias: true,
         preference: 'webgl',
       });
 
-      if (!mounted || !canvasRef.current) return;
+      if (!mounted) return;
 
       canvasRef.current.appendChild(app.canvas as HTMLCanvasElement);
       appRef.current = app;
@@ -289,6 +292,9 @@ export function App() {
   const localConfig = isHost ? p1Config : p2Config;
   const localSpecialCd = isHost ? p1SpecialCd : p2SpecialCd;
 
+  // On mobile (narrow screens), use stacked layout: game on top, controls below
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+
   return (
     <div style={{
       width: '100vw',
@@ -296,9 +302,15 @@ export function App() {
       overflow: 'hidden',
       background: '#06060f',
       position: 'relative',
+      display: screen === 'fighting' && isMobile ? 'flex' : 'block',
+      flexDirection: 'column',
     }}>
       {/* PixiJS canvas container */}
-      <div ref={canvasRef} style={{ position: 'absolute', inset: 0 }} />
+      <div ref={canvasRef} style={
+        screen === 'fighting' && isMobile
+          ? { flex: 1, position: 'relative', minHeight: 0 }
+          : { position: 'absolute', inset: 0 }
+      } />
 
       {/* UI Overlays */}
       {screen === 'modeSelect' && (
@@ -416,84 +428,7 @@ export function App() {
             p2Label={mode === 'vsOnline' ? 'P2 · GUEST' : undefined}
           />
 
-          {/* Touch D-pad — bottom left */}
-          {!paused && !peerDisconnected && (
-            <div style={{
-              position: 'absolute',
-              bottom: '20px',
-              left: '20px',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: '6px',
-              zIndex: 6,
-              userSelect: 'none',
-            }}>
-              {/* Jump button */}
-              <button
-                onPointerDown={(e) => { e.preventDefault(); handleJumpButton(); }}
-                style={{
-                  width: '80px', height: '60px',
-                  background: 'rgba(255,255,255,0.06)',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  borderRadius: '6px',
-                  color: 'rgba(255,255,255,0.5)',
-                  fontSize: '24px',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  touchAction: 'manipulation',
-                  WebkitTapHighlightColor: 'transparent',
-                  cursor: 'pointer',
-                }}
-              >
-                &#9650;
-              </button>
-              {/* Left / Right row */}
-              <div style={{ display: 'flex', gap: '6px' }}>
-                <button
-                  onPointerDown={(e) => { e.preventDefault(); handleDpadDown('left'); }}
-                  onPointerUp={() => handleDpadUp('left')}
-                  onPointerLeave={() => handleDpadUp('left')}
-                  onPointerCancel={() => handleDpadUp('left')}
-                  style={{
-                    width: '80px', height: '60px',
-                    background: 'rgba(255,255,255,0.06)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: '6px',
-                    color: 'rgba(255,255,255,0.5)',
-                    fontSize: '24px',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    touchAction: 'manipulation',
-                    WebkitTapHighlightColor: 'transparent',
-                    cursor: 'pointer',
-                  }}
-                >
-                  &#9664;
-                </button>
-                <button
-                  onPointerDown={(e) => { e.preventDefault(); handleDpadDown('right'); }}
-                  onPointerUp={() => handleDpadUp('right')}
-                  onPointerLeave={() => handleDpadUp('right')}
-                  onPointerCancel={() => handleDpadUp('right')}
-                  style={{
-                    width: '80px', height: '60px',
-                    background: 'rgba(255,255,255,0.06)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: '6px',
-                    color: 'rgba(255,255,255,0.5)',
-                    fontSize: '24px',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    touchAction: 'manipulation',
-                    WebkitTapHighlightColor: 'transparent',
-                    cursor: 'pointer',
-                  }}
-                >
-                  &#9654;
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Attack buttons — bottom right */}
+          {/* Controls strip — fixed bottom on mobile, overlaid on desktop */}
           {!paused && !peerDisconnected && (() => {
             const specialName = localConfig
               ? (SPECIAL_DEFS[localConfig.move_loadout.special]?.name ?? localConfig.move_loadout.special.replace(/_/g, ' '))
@@ -503,9 +438,23 @@ export function App() {
             const accentColor = localConfig?.color_palette.accent ?? '#b44dff';
             const primaryColor = localConfig?.color_palette.primary ?? '#00d4ff';
 
-            const btnBase: React.CSSProperties = {
-              minHeight: '80px',
-              minWidth: '80px',
+            const dpadBtn: React.CSSProperties = {
+              width: isMobile ? '64px' : '80px',
+              height: isMobile ? '50px' : '60px',
+              background: 'rgba(255,255,255,0.08)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: '6px',
+              color: 'rgba(255,255,255,0.5)',
+              fontSize: isMobile ? '20px' : '24px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              touchAction: 'manipulation',
+              WebkitTapHighlightColor: 'transparent',
+              cursor: 'pointer',
+            };
+
+            const atkBtn: React.CSSProperties = {
+              minHeight: isMobile ? '50px' : '80px',
+              minWidth: isMobile ? '60px' : '80px',
               fontFamily: 'var(--font-display)',
               fontWeight: 700,
               borderRadius: '6px',
@@ -517,77 +466,123 @@ export function App() {
               alignItems: 'center',
               justifyContent: 'center',
               gap: '2px',
-              position: 'relative',
-              overflow: 'hidden',
+              padding: isMobile ? '0 10px' : '0 16px',
             };
 
             return (
-              <div style={{
-                position: 'absolute',
-                bottom: '20px',
-                right: '20px',
-                display: 'flex',
-                gap: '8px',
-                zIndex: 6,
-                userSelect: 'none',
-              }}>
-                {/* ATTACK */}
-                <button
-                  onPointerDown={(e) => { e.preventDefault(); handleAttackButton('lightAttack'); }}
-                  style={{
-                    ...btnBase,
-                    background: 'linear-gradient(180deg, rgba(0, 212, 255, 0.15), rgba(0, 100, 200, 0.2))',
-                    color: 'var(--neon-blue)',
-                    border: '1px solid rgba(0, 212, 255, 0.25)',
-                    boxShadow: '0 0 20px rgba(0, 212, 255, 0.1)',
-                    fontSize: '14px',
-                    padding: '0 16px',
-                  }}
-                >
-                  <span style={{ fontSize: '20px', lineHeight: 1, opacity: 0.8 }}>&#9876;</span>
-                  <span style={{ letterSpacing: '0.1em', textTransform: 'uppercase', fontSize: '11px' }}>ATK</span>
-                </button>
+              <div style={
+                isMobile
+                  ? {
+                      // Fixed strip below the game canvas
+                      flexShrink: 0,
+                      height: '140px',
+                      background: '#06060f',
+                      borderTop: '1px solid rgba(255,255,255,0.06)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '8px 12px',
+                      zIndex: 6,
+                      userSelect: 'none',
+                    }
+                  : {
+                      // Desktop: overlaid at bottom
+                      position: 'absolute',
+                      bottom: '20px',
+                      left: '20px',
+                      right: '20px',
+                      display: 'flex',
+                      alignItems: 'flex-end',
+                      justifyContent: 'space-between',
+                      zIndex: 6,
+                      userSelect: 'none',
+                      pointerEvents: 'none',
+                    }
+              }>
+                {/* D-pad — left side */}
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '4px',
+                  pointerEvents: 'auto',
+                }}>
+                  <button onPointerDown={(e) => { e.preventDefault(); handleJumpButton(); }} style={dpadBtn}>
+                    &#9650;
+                  </button>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <button
+                      onPointerDown={(e) => { e.preventDefault(); handleDpadDown('left'); }}
+                      onPointerUp={() => handleDpadUp('left')}
+                      onPointerLeave={() => handleDpadUp('left')}
+                      onPointerCancel={() => handleDpadUp('left')}
+                      style={dpadBtn}
+                    >
+                      &#9664;
+                    </button>
+                    <button
+                      onPointerDown={(e) => { e.preventDefault(); handleDpadDown('right'); }}
+                      onPointerUp={() => handleDpadUp('right')}
+                      onPointerLeave={() => handleDpadUp('right')}
+                      onPointerCancel={() => handleDpadUp('right')}
+                      style={dpadBtn}
+                    >
+                      &#9654;
+                    </button>
+                  </div>
+                </div>
 
-                {/* HEAVY */}
-                <button
-                  onPointerDown={(e) => { e.preventDefault(); handleAttackButton('heavyAttack'); }}
-                  style={{
-                    ...btnBase,
-                    background: 'linear-gradient(180deg, rgba(255, 136, 0, 0.15), rgba(200, 80, 0, 0.2))',
-                    color: '#ff8800',
-                    border: '1px solid rgba(255, 136, 0, 0.25)',
-                    boxShadow: '0 0 20px rgba(255, 136, 0, 0.1)',
-                    fontSize: '14px',
-                    padding: '0 16px',
-                  }}
-                >
-                  <span style={{ fontSize: '20px', lineHeight: 1, opacity: 0.8 }}>&#128165;</span>
-                  <span style={{ letterSpacing: '0.1em', textTransform: 'uppercase', fontSize: '11px' }}>HVY</span>
-                </button>
+                {/* Attack buttons — right side */}
+                <div style={{ display: 'flex', gap: '6px', pointerEvents: 'auto' }}>
+                  <button
+                    onPointerDown={(e) => { e.preventDefault(); handleAttackButton('lightAttack'); }}
+                    style={{
+                      ...atkBtn,
+                      background: 'linear-gradient(180deg, rgba(0, 212, 255, 0.15), rgba(0, 100, 200, 0.2))',
+                      color: 'var(--neon-blue)',
+                      border: '1px solid rgba(0, 212, 255, 0.25)',
+                      boxShadow: '0 0 15px rgba(0, 212, 255, 0.1)',
+                    }}
+                  >
+                    <span style={{ fontSize: isMobile ? '16px' : '20px', lineHeight: 1, opacity: 0.8 }}>&#9876;</span>
+                    <span style={{ letterSpacing: '0.1em', textTransform: 'uppercase', fontSize: isMobile ? '9px' : '11px' }}>ATK</span>
+                  </button>
 
-                {/* SPECIAL */}
-                <button
-                  onPointerDown={(e) => { e.preventDefault(); handleAttackButton('special'); }}
-                  style={{
-                    ...btnBase,
-                    background: onCooldown
-                      ? 'rgba(255,255,255,0.03)'
-                      : `linear-gradient(180deg, ${accentColor}22, ${primaryColor}18)`,
-                    color: onCooldown ? 'rgba(255,255,255,0.2)' : '#fff',
-                    border: onCooldown
-                      ? '1px solid rgba(255,255,255,0.06)'
-                      : `1px solid ${accentColor}44`,
-                    cursor: onCooldown ? 'default' : 'pointer',
-                    boxShadow: onCooldown ? 'none' : `0 0 20px ${accentColor}15`,
-                    opacity: onCooldown ? 0.6 : 1,
-                    padding: '0 16px',
-                  }}
-                >
-                  <span style={{ fontSize: '18px', lineHeight: 1, opacity: 0.8 }}>{onCooldown ? '\u23F3' : '\u2728'}</span>
-                  <span style={{ letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: '10px' }}>
-                    {onCooldown ? `${cooldownSec}s` : specialName}
-                  </span>
-                </button>
+                  <button
+                    onPointerDown={(e) => { e.preventDefault(); handleAttackButton('heavyAttack'); }}
+                    style={{
+                      ...atkBtn,
+                      background: 'linear-gradient(180deg, rgba(255, 136, 0, 0.15), rgba(200, 80, 0, 0.2))',
+                      color: '#ff8800',
+                      border: '1px solid rgba(255, 136, 0, 0.25)',
+                      boxShadow: '0 0 15px rgba(255, 136, 0, 0.1)',
+                    }}
+                  >
+                    <span style={{ fontSize: isMobile ? '16px' : '20px', lineHeight: 1, opacity: 0.8 }}>&#128165;</span>
+                    <span style={{ letterSpacing: '0.1em', textTransform: 'uppercase', fontSize: isMobile ? '9px' : '11px' }}>HVY</span>
+                  </button>
+
+                  <button
+                    onPointerDown={(e) => { e.preventDefault(); handleAttackButton('special'); }}
+                    style={{
+                      ...atkBtn,
+                      background: onCooldown
+                        ? 'rgba(255,255,255,0.03)'
+                        : `linear-gradient(180deg, ${accentColor}22, ${primaryColor}18)`,
+                      color: onCooldown ? 'rgba(255,255,255,0.2)' : '#fff',
+                      border: onCooldown
+                        ? '1px solid rgba(255,255,255,0.06)'
+                        : `1px solid ${accentColor}44`,
+                      opacity: onCooldown ? 0.6 : 1,
+                      boxShadow: onCooldown ? 'none' : `0 0 15px ${accentColor}15`,
+                    }}
+                  >
+                    <span style={{ fontSize: isMobile ? '14px' : '18px', lineHeight: 1, opacity: 0.8 }}>{onCooldown ? '\u23F3' : '\u2728'}</span>
+                    <span style={{ letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: isMobile ? '8px' : '10px' }}>
+                      {onCooldown ? `${cooldownSec}s` : specialName}
+                    </span>
+                  </button>
+                </div>
               </div>
             );
           })()}
