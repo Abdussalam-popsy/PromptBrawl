@@ -22,8 +22,11 @@ export class GameLoop {
   private arena: Arena;
   private p1: Fighter;
   private p2: Fighter;
+  // In online mode, local/remote point to which fighter this client controls
+  private local: Fighter;
+  private remote: Fighter;
   private combat: CombatSystem;
-  private controls: Controls;
+  controls: Controls;
   private ai: AIOpponent | null;
   private multiplayer: MultiplayerSession | null = null;
   private gameOver: boolean = false;
@@ -31,6 +34,7 @@ export class GameLoop {
   private callbacks: GameCallbacks;
   private gameContainer: Container;
   private syncTimer: number = 0;
+  private resizeHandler: (() => void) | null = null;
 
   constructor(
     app: Application,
@@ -39,6 +43,7 @@ export class GameLoop {
     mode: GameMode,
     callbacks: GameCallbacks,
     multiplayer?: MultiplayerSession,
+    isHost: boolean = true,
   ) {
     this.app = app;
     this.callbacks = callbacks;
@@ -53,11 +58,15 @@ export class GameLoop {
     this.arena = new Arena(w, h);
     this.gameContainer.addChild(this.arena.container);
 
-    // Fighters
+    // Fighters — p1 is always left, p2 is always right
     this.p1 = new Fighter(p1Config, this.arena.p1SpawnX, this.arena.groundY, 1);
     this.p2 = new Fighter(p2Config, this.arena.p2SpawnX, this.arena.groundY, -1);
     this.gameContainer.addChild(this.p1.container);
     this.gameContainer.addChild(this.p2.container);
+
+    // In online mode: host controls p1 (left), guest controls p2 (right)
+    this.local = isHost ? this.p1 : this.p2;
+    this.remote = isHost ? this.p2 : this.p1;
 
     // Combat system
     this.combat = new CombatSystem(this.gameContainer);
@@ -80,6 +89,15 @@ export class GameLoop {
       this.setupMultiplayer();
     }
 
+    // Resize handler
+    this.resizeHandler = () => {
+      const newW = window.innerWidth;
+      const newH = window.innerHeight;
+      this.app.renderer.resize(newW, newH);
+      this.arena.resize(newW, newH);
+    };
+    window.addEventListener('resize', this.resizeHandler);
+
     // Start game loop
     this.app.ticker.add(this.update);
 
@@ -90,20 +108,20 @@ export class GameLoop {
   private setupMultiplayer(): void {
     if (!this.multiplayer) return;
 
-    // When we receive remote state, apply it to P2
+    // When we receive remote state, apply it to the remote fighter
     this.multiplayer.onState = (state: StateMessage) => {
-      this.p2.setRemoteState(state);
+      this.remote.setRemoteState(state);
       this.callbacks.onHealthChange(this.p1.hp, this.p2.hp);
     };
 
-    // When we receive remote attack, trigger it on P2
+    // When we receive remote attack, trigger it on the remote fighter
     this.multiplayer.onAction = (action: ActionMessage) => {
-      this.combat.applyInput(this.p2, {
+      this.combat.applyInput(this.remote, {
         left: false, right: false, jump: false,
         lightAttack: action.attack === 'light',
         heavyAttack: action.attack === 'heavy',
         special: action.attack === 'special',
-      }, this.p1);
+      }, this.local);
     };
 
     this.multiplayer.onPeerLeft = () => {
@@ -128,7 +146,7 @@ export class GameLoop {
     return this.paused;
   }
 
-  triggerButton(action: 'lightAttack' | 'heavyAttack' | 'special'): void {
+  triggerButton(action: 'lightAttack' | 'heavyAttack' | 'special' | 'jump'): void {
     this.controls.triggerButton(action);
   }
 
@@ -137,25 +155,24 @@ export class GameLoop {
 
     const dt = this.app.ticker.deltaTime;
 
-    // Get inputs
-    const p1Input = this.controls.getP1Input();
-
-    // Apply P1 input (always local)
-    this.combat.applyInput(this.p1, p1Input, this.p2);
+    // Get inputs — always apply to the local fighter
+    const localInput = this.controls.getP1Input();
+    const opponent = this.local === this.p1 ? this.p2 : this.p1;
+    this.combat.applyInput(this.local, localInput, opponent);
 
     // Send attack actions over multiplayer
     if (this.multiplayer) {
-      if (p1Input.lightAttack) this.multiplayer.sendAction('light');
-      if (p1Input.heavyAttack) this.multiplayer.sendAction('heavy');
-      if (p1Input.special) this.multiplayer.sendAction('special');
+      if (localInput.lightAttack) this.multiplayer.sendAction('light');
+      if (localInput.heavyAttack) this.multiplayer.sendAction('heavy');
+      if (localInput.special) this.multiplayer.sendAction('special');
     }
 
-    // P2 input: AI mode uses AI, online mode uses remote state (applied via callback)
+    // AI controls p2 (only in vsAI mode where local=p1)
     if (this.ai) {
       const p2Input = this.ai.getInput(this.p2, this.p1);
       this.combat.applyInput(this.p2, p2Input, this.p1);
     }
-    // vsOnline: P2 input is handled via multiplayer.onAction callback
+    // vsOnline: remote fighter input is handled via multiplayer.onAction callback
 
     // Clear single-frame inputs
     this.controls.clearJustPressed();
@@ -168,21 +185,21 @@ export class GameLoop {
     this.combat.updateProjectiles(dt, [this.p1, this.p2], this.arena.width);
     this.combat.updateParticles(dt);
 
-    // Broadcast local state to remote peer at SYNC_RATE
+    // Broadcast local fighter state to remote peer at SYNC_RATE
     if (this.multiplayer) {
       this.syncTimer += dt * 16.67;
       if (this.syncTimer >= SYNC_RATE_MS) {
         this.syncTimer = 0;
         this.multiplayer.sendState({
-          x: this.p1.x,
-          y: this.p1.y,
-          vx: this.p1.vx,
-          vy: this.p1.vy,
-          facing: this.p1.facing,
-          state: this.p1.state,
-          hp: this.p1.hp,
-          specialCooldown: this.p1.specialCooldown,
-          shieldActive: this.p1.shieldActive,
+          x: this.local.x,
+          y: this.local.y,
+          vx: this.local.vx,
+          vy: this.local.vy,
+          facing: this.local.facing,
+          state: this.local.state,
+          hp: this.local.hp,
+          specialCooldown: this.local.specialCooldown,
+          shieldActive: this.local.shieldActive,
         });
       }
     }
@@ -205,5 +222,9 @@ export class GameLoop {
     this.controls.destroy();
     this.combat.cleanup();
     this.gameContainer.destroy({ children: true });
+    if (this.resizeHandler) {
+      window.removeEventListener('resize', this.resizeHandler);
+      this.resizeHandler = null;
+    }
   }
 }

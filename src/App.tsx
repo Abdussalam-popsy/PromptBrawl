@@ -18,8 +18,9 @@ type Screen = 'modeSelect' | 'lobby' | 'p1Prompt' | 'waitingForPeer' | 'vsScreen
 export function App() {
   const [screen, setScreen] = useState<Screen>('modeSelect');
   const [mode, setMode] = useState<GameMode>('vsAI');
-  const [p1Config, setP1Config] = useState<FighterConfig | null>(null);
-  const [p2Config, setP2Config] = useState<FighterConfig | null>(null);
+  // myConfig = the config this player created, peerConfig = received from network
+  const [myConfig, setMyConfig] = useState<FighterConfig | null>(null);
+  const [peerConfig, setPeerConfig] = useState<FighterConfig | null>(null);
   const [winner, setWinner] = useState<FighterConfig | null>(null);
   const [p1Hp, setP1Hp] = useState(100);
   const [p2Hp, setP2Hp] = useState(100);
@@ -38,9 +39,13 @@ export function App() {
   const gameLoopRef = useRef<GameLoop | null>(null);
   const mpRef = useRef<MultiplayerSession | null>(null);
   const configResendRef = useRef<number | null>(null);
-  // Use refs for configs to avoid stale closures
-  const p1ConfigRef = useRef<FighterConfig | null>(null);
-  const p2ConfigRef = useRef<FighterConfig | null>(null);
+  const myConfigRef = useRef<FighterConfig | null>(null);
+  const peerConfigRef = useRef<FighterConfig | null>(null);
+
+  // Derive p1Config (left/host) and p2Config (right/guest) from myConfig + peerConfig
+  // Host: p1=my, p2=peer. Guest: p1=peer, p2=my.
+  const p1Config = mode === 'vsOnline' && !isHost ? peerConfig : myConfig;
+  const p2Config = mode === 'vsOnline' && !isHost ? myConfig : peerConfig;
 
   const stopConfigResend = useCallback(() => {
     if (configResendRef.current !== null) {
@@ -52,10 +57,10 @@ export function App() {
   const resetAll = useCallback(() => {
     setPaused(false);
     setScreen('modeSelect');
-    setP1Config(null);
-    setP2Config(null);
-    p1ConfigRef.current = null;
-    p2ConfigRef.current = null;
+    setMyConfig(null);
+    setPeerConfig(null);
+    myConfigRef.current = null;
+    peerConfigRef.current = null;
     setWinner(null);
     setP1Hp(100);
     setP2Hp(100);
@@ -109,22 +114,6 @@ export function App() {
     });
   }, []);
 
-  // Check if both configs ready and trigger game start (host only)
-  const checkBothReady = useCallback(() => {
-    const session = mpRef.current;
-    if (!session) return;
-    const myConfig = p1ConfigRef.current;
-    const peerConfig = p2ConfigRef.current;
-    if (myConfig && peerConfig) {
-      stopConfigResend();
-      if (session.isHost) {
-        // Host sends game_start
-        session.sendGameStart();
-      }
-      setScreen('vsScreen');
-    }
-  }, [stopConfigResend]);
-
   const handleCreateRoom = useCallback(async (): Promise<string> => {
     const session = mpRef.current;
     if (!session) throw new Error('Not connected');
@@ -151,36 +140,36 @@ export function App() {
   }, []);
 
   const handleP1Ready = useCallback(async (config: FighterConfig) => {
-    setP1Config(config);
-    p1ConfigRef.current = config;
+    setMyConfig(config);
+    myConfigRef.current = config;
 
     if (mode === 'vsOnline') {
       const session = mpRef.current;
       if (!session) return;
-      // Send config immediately
       session.sendFighterConfig(config);
-      // Resend every 500ms until both configs are confirmed
       stopConfigResend();
       configResendRef.current = window.setInterval(() => {
-        // Keep resending until we have both configs
-        if (p2ConfigRef.current) {
+        if (peerConfigRef.current) {
           stopConfigResend();
           return;
         }
         session.sendFighterConfig(config);
       }, 500);
-      // Show waiting screen
       setScreen('waitingForPeer');
       // Check if we already have peer config
-      checkBothReady();
+      if (peerConfigRef.current) {
+        stopConfigResend();
+        if (session.isHost) session.sendGameStart();
+        setScreen('vsScreen');
+      }
     } else if (mode === 'vsAI') {
       const aiPrompt = getRandomAIPrompt();
       const aiConfig = await generateFighter(aiPrompt);
-      setP2Config(aiConfig);
-      p2ConfigRef.current = aiConfig;
+      setPeerConfig(aiConfig);
+      peerConfigRef.current = aiConfig;
       setScreen('vsScreen');
     }
-  }, [mode, stopConfigResend, checkBothReady]);
+  }, [mode, stopConfigResend]);
 
   // Listen for peer fighter config and game_start in online mode
   useEffect(() => {
@@ -188,21 +177,17 @@ export function App() {
     const session = mpRef.current;
 
     session.onFighterConfig = (remoteConfig: FighterConfig) => {
-      setP2Config(remoteConfig);
-      p2ConfigRef.current = remoteConfig;
-      // If we also have our config, we're both ready
-      if (p1ConfigRef.current) {
+      setPeerConfig(remoteConfig);
+      peerConfigRef.current = remoteConfig;
+      if (myConfigRef.current) {
         stopConfigResend();
-        if (session.isHost) {
-          session.sendGameStart();
-        }
+        if (session.isHost) session.sendGameStart();
         setScreen('vsScreen');
       }
     };
 
     session.onGameStart = () => {
-      // Guest receives game_start from host
-      if (p1ConfigRef.current && p2ConfigRef.current) {
+      if (myConfigRef.current && peerConfigRef.current) {
         stopConfigResend();
         setScreen('vsScreen');
       }
@@ -224,23 +209,15 @@ export function App() {
   // Pause on Escape during fight
   useEffect(() => {
     if (screen !== 'fighting') return;
-
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
         const gl = gameLoopRef.current;
         if (!gl) return;
-
-        if (gl.isPaused) {
-          gl.resume();
-          setPaused(false);
-        } else {
-          gl.pause();
-          setPaused(true);
-        }
+        if (gl.isPaused) { gl.resume(); setPaused(false); }
+        else { gl.pause(); setPaused(true); }
       }
     };
-
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [screen]);
@@ -271,23 +248,11 @@ export function App() {
       appRef.current = app;
 
       const gameLoop = new GameLoop(app, p1Config, p2Config, mode, {
-        onHealthChange: (h1, h2) => {
-          setP1Hp(h1);
-          setP2Hp(h2);
-        },
-        onSpecialCooldown: (cd1, cd2) => {
-          setP1SpecialCd(cd1);
-          setP2SpecialCd(cd2);
-        },
-        onGameOver: (winnerConfig) => {
-          setWinner(winnerConfig);
-          setScreen('victory');
-        },
-        onPeerDisconnected: () => {
-          setPeerDisconnected(true);
-          gameLoopRef.current?.pause();
-        },
-      }, mpRef.current ?? undefined);
+        onHealthChange: (h1, h2) => { setP1Hp(h1); setP2Hp(h2); },
+        onSpecialCooldown: (cd1, cd2) => { setP1SpecialCd(cd1); setP2SpecialCd(cd2); },
+        onGameOver: (winnerConfig) => { setWinner(winnerConfig); setScreen('victory'); },
+        onPeerDisconnected: () => { setPeerDisconnected(true); gameLoopRef.current?.pause(); },
+      }, mpRef.current ?? undefined, isHost);
       gameLoopRef.current = gameLoop;
     };
 
@@ -302,11 +267,27 @@ export function App() {
         appRef.current = null;
       }
     };
-  }, [screen, p1Config, p2Config, mode]);
+  }, [screen, p1Config, p2Config, mode, isHost]);
 
   const handleAttackButton = useCallback((action: 'lightAttack' | 'heavyAttack' | 'special') => {
     gameLoopRef.current?.triggerButton(action);
   }, []);
+
+  const handleDpadDown = useCallback((direction: 'left' | 'right') => {
+    gameLoopRef.current?.controls.setTouchDirection(direction, true);
+  }, []);
+
+  const handleDpadUp = useCallback((direction: 'left' | 'right') => {
+    gameLoopRef.current?.controls.setTouchDirection(direction, false);
+  }, []);
+
+  const handleJumpButton = useCallback(() => {
+    gameLoopRef.current?.triggerButton('jump');
+  }, []);
+
+  // Determine special info for the local player's fighter
+  const localConfig = isHost ? p1Config : p2Config;
+  const localSpecialCd = isHost ? p1SpecialCd : p2SpecialCd;
 
   return (
     <div style={{
@@ -340,7 +321,7 @@ export function App() {
 
       {screen === 'p1Prompt' && (
         <PromptInput
-          playerNumber={1}
+          playerNumber={isHost || mode === 'vsAI' ? 1 : 2}
           onFighterReady={handleP1Ready}
           onBack={() => setScreen('modeSelect')}
         />
@@ -349,12 +330,8 @@ export function App() {
       {/* Waiting for peer's config after submitting own */}
       {screen === 'waitingForPeer' && (
         <div style={{
-          position: 'absolute',
-          inset: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
+          position: 'absolute', inset: 0,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
           background: 'linear-gradient(180deg, #06060f 0%, #0d0d24 50%, #06060f 100%)',
           zIndex: 10,
         }}>
@@ -364,23 +341,16 @@ export function App() {
           }} />
           <div style={{ zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             <p style={{
-              fontFamily: 'var(--font-display)',
-              color: 'rgba(255,255,255,0.5)',
-              fontSize: '14px',
-              marginBottom: '24px',
-              letterSpacing: '0.3em',
-              textTransform: 'uppercase',
-              animation: 'neon-pulse 2s ease-in-out infinite',
+              fontFamily: 'var(--font-display)', color: 'rgba(255,255,255,0.5)',
+              fontSize: '14px', marginBottom: '24px', letterSpacing: '0.3em',
+              textTransform: 'uppercase', animation: 'neon-pulse 2s ease-in-out infinite',
             }}>
               Waiting for opponent's fighter...
             </p>
             <div style={{
-              width: '32px',
-              height: '32px',
-              border: '2px solid rgba(0, 212, 255, 0.15)',
-              borderTopColor: 'var(--neon-blue)',
-              borderRadius: '50%',
-              animation: 'spin 0.8s linear infinite',
+              width: '32px', height: '32px',
+              border: '2px solid rgba(0, 212, 255, 0.15)', borderTopColor: 'var(--neon-blue)',
+              borderRadius: '50%', animation: 'spin 0.8s linear infinite',
             }} />
           </div>
         </div>
@@ -388,56 +358,39 @@ export function App() {
 
       {screen === 'vsScreen' && p1Config && p2Config && (
         <div style={{
-          position: 'absolute',
-          inset: 0,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
+          position: 'absolute', inset: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: `
             radial-gradient(ellipse at 30% 50%, ${p1Config.color_palette.primary}11 0%, transparent 40%),
             radial-gradient(ellipse at 70% 50%, ${p2Config.color_palette.primary}11 0%, transparent 40%),
             linear-gradient(180deg, #06060f 0%, #0d0d24 50%, #06060f 100%)
           `,
-          zIndex: 10,
-          overflow: 'hidden',
+          zIndex: 10, overflow: 'hidden',
         }}>
-          {/* Scanline */}
           <div style={{
             position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0.3,
             background: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.15) 2px, rgba(0,0,0,0.15) 4px)',
           }} />
           <div style={{ textAlign: 'center', zIndex: 1 }}>
             <span style={{
-              fontFamily: 'var(--font-display)',
-              color: p1Config.color_palette.primary,
-              fontSize: 'clamp(28px, 5vw, 42px)',
-              fontWeight: 900,
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              textShadow: `0 0 40px ${p1Config.color_palette.primary}44`,
+              fontFamily: 'var(--font-display)', color: p1Config.color_palette.primary,
+              fontSize: 'clamp(28px, 5vw, 42px)', fontWeight: 900, textTransform: 'uppercase',
+              letterSpacing: '0.05em', textShadow: `0 0 40px ${p1Config.color_palette.primary}44`,
               animation: 'slide-up 0.4s both',
             }}>
               {p1Config.name}
             </span>
             <span style={{
-              fontFamily: 'var(--font-display)',
-              color: 'rgba(255,255,255,0.12)',
-              fontSize: 'clamp(36px, 6vw, 56px)',
-              fontWeight: 900,
-              margin: '0 28px',
-              letterSpacing: '0.1em',
-              animation: 'scale-in 0.3s 0.15s both',
+              fontFamily: 'var(--font-display)', color: 'rgba(255,255,255,0.12)',
+              fontSize: 'clamp(36px, 6vw, 56px)', fontWeight: 900, margin: '0 28px',
+              letterSpacing: '0.1em', animation: 'scale-in 0.3s 0.15s both',
             }}>
               VS
             </span>
             <span style={{
-              fontFamily: 'var(--font-display)',
-              color: p2Config.color_palette.primary,
-              fontSize: 'clamp(28px, 5vw, 42px)',
-              fontWeight: 900,
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              textShadow: `0 0 40px ${p2Config.color_palette.primary}44`,
+              fontFamily: 'var(--font-display)', color: p2Config.color_palette.primary,
+              fontSize: 'clamp(28px, 5vw, 42px)', fontWeight: 900, textTransform: 'uppercase',
+              letterSpacing: '0.05em', textShadow: `0 0 40px ${p2Config.color_palette.primary}44`,
               animation: 'slide-up 0.4s 0.1s both',
             }}>
               {p2Config.name}
@@ -447,11 +400,7 @@ export function App() {
       )}
 
       {screen === 'tutorial' && p1Config && p2Config && (
-        <ControlsTutorial
-          p1Config={p1Config}
-          p2Config={p2Config}
-          onStart={handleTutorialStart}
-        />
+        <ControlsTutorial p1Config={p1Config} p2Config={p2Config} onStart={handleTutorialStart} />
       )}
 
       {screen === 'fighting' && p1Config && p2Config && (
@@ -463,21 +412,103 @@ export function App() {
             p2Hp={p2Hp}
             p1SpecialCd={p1SpecialCd}
             p2SpecialCd={p2SpecialCd}
+            p1Label={mode === 'vsOnline' ? 'P1 · HOST' : undefined}
+            p2Label={mode === 'vsOnline' ? 'P2 · GUEST' : undefined}
           />
 
-          {/* On-screen attack buttons */}
+          {/* Touch D-pad — bottom left */}
+          {!paused && !peerDisconnected && (
+            <div style={{
+              position: 'absolute',
+              bottom: '20px',
+              left: '20px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '6px',
+              zIndex: 6,
+              userSelect: 'none',
+            }}>
+              {/* Jump button */}
+              <button
+                onPointerDown={(e) => { e.preventDefault(); handleJumpButton(); }}
+                style={{
+                  width: '80px', height: '60px',
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '6px',
+                  color: 'rgba(255,255,255,0.5)',
+                  fontSize: '24px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  touchAction: 'manipulation',
+                  WebkitTapHighlightColor: 'transparent',
+                  cursor: 'pointer',
+                }}
+              >
+                &#9650;
+              </button>
+              {/* Left / Right row */}
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button
+                  onPointerDown={(e) => { e.preventDefault(); handleDpadDown('left'); }}
+                  onPointerUp={() => handleDpadUp('left')}
+                  onPointerLeave={() => handleDpadUp('left')}
+                  onPointerCancel={() => handleDpadUp('left')}
+                  style={{
+                    width: '80px', height: '60px',
+                    background: 'rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: '6px',
+                    color: 'rgba(255,255,255,0.5)',
+                    fontSize: '24px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    touchAction: 'manipulation',
+                    WebkitTapHighlightColor: 'transparent',
+                    cursor: 'pointer',
+                  }}
+                >
+                  &#9664;
+                </button>
+                <button
+                  onPointerDown={(e) => { e.preventDefault(); handleDpadDown('right'); }}
+                  onPointerUp={() => handleDpadUp('right')}
+                  onPointerLeave={() => handleDpadUp('right')}
+                  onPointerCancel={() => handleDpadUp('right')}
+                  style={{
+                    width: '80px', height: '60px',
+                    background: 'rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: '6px',
+                    color: 'rgba(255,255,255,0.5)',
+                    fontSize: '24px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    touchAction: 'manipulation',
+                    WebkitTapHighlightColor: 'transparent',
+                    cursor: 'pointer',
+                  }}
+                >
+                  &#9654;
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Attack buttons — bottom right */}
           {!paused && !peerDisconnected && (() => {
-            const specialName = SPECIAL_DEFS[p1Config.move_loadout.special]?.name
-              ?? p1Config.move_loadout.special.replace(/_/g, ' ');
-            const cooldownSec = Math.ceil(Math.max(0, p1SpecialCd) / 1000);
-            const onCooldown = p1SpecialCd > 0;
+            const specialName = localConfig
+              ? (SPECIAL_DEFS[localConfig.move_loadout.special]?.name ?? localConfig.move_loadout.special.replace(/_/g, ' '))
+              : 'Special';
+            const cooldownSec = Math.ceil(Math.max(0, localSpecialCd) / 1000);
+            const onCooldown = localSpecialCd > 0;
+            const accentColor = localConfig?.color_palette.accent ?? '#b44dff';
+            const primaryColor = localConfig?.color_palette.primary ?? '#00d4ff';
 
             const btnBase: React.CSSProperties = {
-              padding: '0 28px',
-              minHeight: '90px',
+              minHeight: '80px',
+              minWidth: '80px',
               fontFamily: 'var(--font-display)',
               fontWeight: 700,
-              borderRadius: '4px',
+              borderRadius: '6px',
               cursor: 'pointer',
               touchAction: 'manipulation',
               WebkitTapHighlightColor: 'transparent',
@@ -485,21 +516,18 @@ export function App() {
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '4px',
-              transition: 'transform 0.1s, box-shadow 0.2s',
+              gap: '2px',
               position: 'relative',
               overflow: 'hidden',
-              minWidth: '120px',
             };
 
             return (
               <div style={{
                 position: 'absolute',
                 bottom: '20px',
-                left: '50%',
-                transform: 'translateX(-50%)',
+                right: '20px',
                 display: 'flex',
-                gap: '10px',
+                gap: '8px',
                 zIndex: 6,
                 userSelect: 'none',
               }}>
@@ -513,13 +541,11 @@ export function App() {
                     border: '1px solid rgba(0, 212, 255, 0.25)',
                     boxShadow: '0 0 20px rgba(0, 212, 255, 0.1)',
                     fontSize: '14px',
-                    clipPath: 'polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px))',
+                    padding: '0 16px',
                   }}
-                  onPointerUp={e => e.currentTarget.style.transform = 'scale(1)'}
                 >
                   <span style={{ fontSize: '20px', lineHeight: 1, opacity: 0.8 }}>&#9876;</span>
-                  <span style={{ letterSpacing: '0.15em', textTransform: 'uppercase', fontSize: '13px' }}>ATTACK</span>
-                  <span style={{ fontSize: '9px', color: 'rgba(0, 212, 255, 0.4)', fontWeight: 500, fontFamily: 'var(--font-body)', letterSpacing: '0.05em' }}>Fast hit</span>
+                  <span style={{ letterSpacing: '0.1em', textTransform: 'uppercase', fontSize: '11px' }}>ATK</span>
                 </button>
 
                 {/* HEAVY */}
@@ -532,13 +558,11 @@ export function App() {
                     border: '1px solid rgba(255, 136, 0, 0.25)',
                     boxShadow: '0 0 20px rgba(255, 136, 0, 0.1)',
                     fontSize: '14px',
-                    clipPath: 'polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px))',
+                    padding: '0 16px',
                   }}
-                  onPointerUp={e => e.currentTarget.style.transform = 'scale(1)'}
                 >
                   <span style={{ fontSize: '20px', lineHeight: 1, opacity: 0.8 }}>&#128165;</span>
-                  <span style={{ letterSpacing: '0.15em', textTransform: 'uppercase', fontSize: '13px' }}>HEAVY</span>
-                  <span style={{ fontSize: '9px', color: 'rgba(255, 136, 0, 0.4)', fontWeight: 500, fontFamily: 'var(--font-body)', letterSpacing: '0.05em' }}>Slow power</span>
+                  <span style={{ letterSpacing: '0.1em', textTransform: 'uppercase', fontSize: '11px' }}>HVY</span>
                 </button>
 
                 {/* SPECIAL */}
@@ -548,26 +572,20 @@ export function App() {
                     ...btnBase,
                     background: onCooldown
                       ? 'rgba(255,255,255,0.03)'
-                      : `linear-gradient(180deg, ${p1Config.color_palette.accent}22, ${p1Config.color_palette.primary}18)`,
+                      : `linear-gradient(180deg, ${accentColor}22, ${primaryColor}18)`,
                     color: onCooldown ? 'rgba(255,255,255,0.2)' : '#fff',
                     border: onCooldown
                       ? '1px solid rgba(255,255,255,0.06)'
-                      : `1px solid ${p1Config.color_palette.accent}44`,
+                      : `1px solid ${accentColor}44`,
                     cursor: onCooldown ? 'default' : 'pointer',
-                    boxShadow: onCooldown ? 'none' : `0 0 20px ${p1Config.color_palette.accent}15`,
+                    boxShadow: onCooldown ? 'none' : `0 0 20px ${accentColor}15`,
                     opacity: onCooldown ? 0.6 : 1,
-                    minWidth: '130px',
-                    fontSize: '14px',
-                    clipPath: 'polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px))',
+                    padding: '0 16px',
                   }}
-                  onPointerUp={e => e.currentTarget.style.transform = 'scale(1)'}
                 >
                   <span style={{ fontSize: '18px', lineHeight: 1, opacity: 0.8 }}>{onCooldown ? '\u23F3' : '\u2728'}</span>
-                  <span style={{ letterSpacing: '0.1em', textTransform: 'uppercase', fontSize: '12px' }}>
+                  <span style={{ letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: '10px' }}>
                     {onCooldown ? `${cooldownSec}s` : specialName}
-                  </span>
-                  <span style={{ fontSize: '9px', color: onCooldown ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.3)', fontWeight: 500, fontFamily: 'var(--font-body)', letterSpacing: '0.05em' }}>
-                    {onCooldown ? 'Cooldown' : 'Special'}
                   </span>
                 </button>
               </div>
@@ -577,16 +595,10 @@ export function App() {
           {/* Peer disconnected overlay */}
           {peerDisconnected && (
             <div style={{
-              position: 'absolute',
-              inset: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: 'rgba(4, 4, 12, 0.92)',
-              backdropFilter: 'blur(8px)',
-              zIndex: 30,
-              animation: 'fade-in 0.2s both',
+              position: 'absolute', inset: 0,
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              background: 'rgba(4, 4, 12, 0.92)', backdropFilter: 'blur(8px)',
+              zIndex: 30, animation: 'fade-in 0.2s both',
             }}>
               <div style={{
                 position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0.2,
@@ -594,69 +606,42 @@ export function App() {
               }} />
               <div style={{ zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                 <div style={{
-                  width: '48px',
-                  height: '48px',
-                  borderRadius: '50%',
-                  background: 'rgba(255, 45, 123, 0.1)',
-                  border: '2px solid rgba(255, 45, 123, 0.3)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  marginBottom: '20px',
-                  fontSize: '24px',
+                  width: '48px', height: '48px', borderRadius: '50%',
+                  background: 'rgba(255, 45, 123, 0.1)', border: '2px solid rgba(255, 45, 123, 0.3)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  marginBottom: '20px', fontSize: '24px',
                 }}>
                   &#x26A0;
                 </div>
                 <h2 style={{
-                  fontFamily: 'var(--font-display)',
-                  fontSize: '28px',
-                  fontWeight: 900,
-                  color: 'var(--neon-pink)',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.1em',
+                  fontFamily: 'var(--font-display)', fontSize: '28px', fontWeight: 900,
+                  color: 'var(--neon-pink)', textTransform: 'uppercase', letterSpacing: '0.1em',
                   marginBottom: '12px',
                 }}>
                   OPPONENT DISCONNECTED
                 </h2>
                 <p style={{
-                  fontFamily: 'var(--font-body)',
-                  color: 'rgba(255,255,255,0.4)',
-                  fontSize: '15px',
-                  fontWeight: 500,
-                  marginBottom: '32px',
+                  fontFamily: 'var(--font-body)', color: 'rgba(255,255,255,0.4)',
+                  fontSize: '15px', fontWeight: 500, marginBottom: '32px',
                 }}>
                   Your opponent has left the match
                 </p>
-                <button
-                  onClick={resetAll}
-                  className="btn-arcade"
-                  style={{
-                    padding: '16px 48px',
-                    fontSize: '16px',
-                    fontWeight: 700,
-                    fontFamily: 'var(--font-display)',
-                    background: 'linear-gradient(135deg, rgba(0, 212, 255, 0.15), rgba(0, 100, 200, 0.1))',
-                    color: 'var(--neon-blue)',
-                    border: '1px solid rgba(0, 212, 255, 0.25)',
-                    borderRadius: '2px',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.15em',
-                    clipPath: 'polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px))',
-                  }}
-                >
+                <button onClick={resetAll} className="btn-arcade" style={{
+                  padding: '16px 48px', fontSize: '16px', fontWeight: 700,
+                  fontFamily: 'var(--font-display)',
+                  background: 'linear-gradient(135deg, rgba(0, 212, 255, 0.15), rgba(0, 100, 200, 0.1))',
+                  color: 'var(--neon-blue)', border: '1px solid rgba(0, 212, 255, 0.25)',
+                  borderRadius: '2px', textTransform: 'uppercase', letterSpacing: '0.15em',
+                  clipPath: 'polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px))',
+                }}>
                   RETURN TO MENU
                 </button>
               </div>
             </div>
           )}
 
-          {paused && !peerDisconnected && (
-            <PauseMenu
-              p1Config={p1Config}
-              p2Config={p2Config}
-              onResume={handleResume}
-              onQuit={resetAll}
-            />
+          {paused && !peerDisconnected && p1Config && p2Config && (
+            <PauseMenu p1Config={p1Config} p2Config={p2Config} onResume={handleResume} onQuit={resetAll} />
           )}
         </>
       )}

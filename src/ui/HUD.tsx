@@ -7,6 +7,8 @@ interface HUDProps {
   p2Hp: number;
   p1SpecialCd: number;
   p2SpecialCd: number;
+  p1Label?: string;
+  p2Label?: string;
 }
 
 function HealthBar({
@@ -14,11 +16,13 @@ function HealthBar({
   hp,
   specialCd,
   align,
+  label,
 }: {
   config: FighterConfig;
   hp: number;
   specialCd: number;
   align: 'left' | 'right';
+  label?: string;
 }) {
   const displayHp = Math.round(Math.max(0, hp));
   const pct = Math.max(0, Math.min(100, displayHp));
@@ -33,6 +37,21 @@ function HealthBar({
       alignItems: align === 'left' ? 'flex-start' : 'flex-end',
       width: '44%',
     }}>
+      {/* Role label */}
+      {label && (
+        <span style={{
+          fontFamily: 'var(--font-mono)',
+          color: 'rgba(255,255,255,0.3)',
+          fontSize: '9px',
+          fontWeight: 700,
+          textTransform: 'uppercase',
+          letterSpacing: '0.15em',
+          marginBottom: '2px',
+        }}>
+          {label}
+        </span>
+      )}
+
       {/* Name + Special indicator */}
       <div style={{
         display: 'flex',
@@ -125,7 +144,7 @@ function HealthBar({
   );
 }
 
-export function HUD({ p1Config, p2Config, p1Hp, p2Hp, p1SpecialCd, p2SpecialCd }: HUDProps) {
+export function HUD({ p1Config, p2Config, p1Hp, p2Hp, p1SpecialCd, p2SpecialCd, p1Label, p2Label }: HUDProps) {
   return (
     <div style={{
       position: 'absolute',
@@ -140,7 +159,7 @@ export function HUD({ p1Config, p2Config, p1Hp, p2Hp, p1SpecialCd, p2SpecialCd }
       zIndex: 5,
       background: 'linear-gradient(180deg, rgba(0,0,0,0.5) 0%, transparent 100%)',
     }}>
-      <HealthBar config={p1Config} hp={p1Hp} specialCd={p1SpecialCd} align="left" />
+      <HealthBar config={p1Config} hp={p1Hp} specialCd={p1SpecialCd} align="left" label={p1Label} />
       <span style={{
         fontFamily: 'var(--font-display)',
         color: 'rgba(255,255,255,0.15)',
@@ -151,7 +170,7 @@ export function HUD({ p1Config, p2Config, p1Hp, p2Hp, p1SpecialCd, p2SpecialCd }
       }}>
         VS
       </span>
-      <HealthBar config={p2Config} hp={p2Hp} specialCd={p2SpecialCd} align="right" />
+      <HealthBar config={p2Config} hp={p2Hp} specialCd={p2SpecialCd} align="right" label={p2Label} />
     </div>
   );
 }
