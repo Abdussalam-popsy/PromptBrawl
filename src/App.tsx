@@ -99,6 +99,7 @@ export function App() {
         setConnectionError(err instanceof Error ? err.message : 'Connection failed');
       });
     } else {
+      setIsHost(true);
       setScreen('p1Prompt');
     }
   }, []);
