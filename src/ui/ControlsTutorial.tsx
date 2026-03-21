@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { type FighterConfig } from '../ai/fighterConfig';
 import { SPECIAL_DEFS } from '../ai/moveLibrary';
 
@@ -92,24 +92,27 @@ function getSpecialName(config: FighterConfig): string {
 
 export function ControlsTutorial({ p1Config, onStart }: ControlsTutorialProps) {
   const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS);
+  const startedRef = useRef(false);
+
+  const handleStart = useCallback(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    onStart();
+  }, [onStart]);
 
   useEffect(() => {
     const interval = setInterval(() => {
       setCountdown(prev => {
         if (prev <= 1) {
           clearInterval(interval);
-          onStart();
+          handleStart();
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, [onStart]);
-
-  const handleStart = useCallback(() => {
-    onStart();
-  }, [onStart]);
+  }, [handleStart]);
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {

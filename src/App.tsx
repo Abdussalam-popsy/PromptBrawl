@@ -33,6 +33,7 @@ export function App() {
   const [peerJoined, setPeerJoined] = useState(false);
   const [peerDisconnected, setPeerDisconnected] = useState(false);
   const [connectionError, setConnectionError] = useState('');
+  const [waitingExpired, setWaitingExpired] = useState(false);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
@@ -65,6 +66,7 @@ export function App() {
     setP1Hp(100);
     setP2Hp(100);
     setPeerDisconnected(false);
+    setWaitingExpired(false);
     setConnectionError('');
     stopConfigResend();
     mpRef.current?.disconnect();
@@ -194,6 +196,16 @@ export function App() {
     };
   }, [mode, stopConfigResend]);
 
+  // waitingForPeer 60s timeout
+  useEffect(() => {
+    if (screen !== 'waitingForPeer') {
+      setWaitingExpired(false);
+      return;
+    }
+    const timer = setTimeout(() => setWaitingExpired(true), 60000);
+    return () => clearTimeout(timer);
+  }, [screen]);
+
   // VS screen auto-advance to tutorial
   useEffect(() => {
     if (screen === 'vsScreen') {
@@ -236,45 +248,50 @@ export function App() {
     let resizeHandler: (() => void) | null = null;
 
     const initGame = async () => {
-      const container = canvasRef.current;
-      if (!container) return;
+      try {
+        const container = canvasRef.current;
+        if (!container) return;
 
-      // Ensure container fills parent, then force layout to get actual pixel dimensions
-      container.style.width = '100%';
-      container.style.height = '100%';
-      const rect = container.getBoundingClientRect();
+        // Ensure container fills parent, then force layout to get actual pixel dimensions
+        container.style.width = '100%';
+        container.style.height = '100%';
+        const rect = container.getBoundingClientRect();
 
-      const app = new Application();
-      await app.init({
-        background: '#0a0a1a',
-        width: rect.width,
-        height: rect.height,
-        resizeTo: container,
-        antialias: true,
-        preference: 'webgl',
-      });
+        const app = new Application();
+        await app.init({
+          background: '#0a0a1a',
+          width: rect.width,
+          height: rect.height,
+          resizeTo: container,
+          antialias: true,
+          preference: 'webgl',
+        });
 
-      if (!mounted) return;
+        if (!mounted) return;
 
-      container.appendChild(app.canvas as HTMLCanvasElement);
-      appRef.current = app;
+        container.appendChild(app.canvas as HTMLCanvasElement);
+        appRef.current = app;
 
-      // Resize listener to keep PixiJS in sync with container
-      resizeHandler = () => {
-        app.renderer.resize(container.clientWidth, container.clientHeight);
-      };
-      window.addEventListener('resize', resizeHandler);
+        // Resize listener to keep PixiJS in sync with container
+        resizeHandler = () => {
+          app.renderer.resize(container.clientWidth, container.clientHeight);
+        };
+        window.addEventListener('resize', resizeHandler);
 
-      const gameLoop = new GameLoop(app, p1Config, p2Config, mode, {
-        onHealthChange: (h1, h2) => { setP1Hp(h1); setP2Hp(h2); },
-        onSpecialCooldown: (cd1, cd2) => { setP1SpecialCd(cd1); setP2SpecialCd(cd2); },
-        onGameOver: (winnerConfig) => { setWinner(winnerConfig); setScreen('victory'); },
-        onPeerDisconnected: () => { setPeerDisconnected(true); gameLoopRef.current?.pause(); },
-      }, mpRef.current ?? undefined, isHost);
-      gameLoopRef.current = gameLoop;
+        const gameLoop = new GameLoop(app, p1Config, p2Config, mode, {
+          onHealthChange: (h1, h2) => { setP1Hp(h1); setP2Hp(h2); },
+          onSpecialCooldown: (cd1, cd2) => { setP1SpecialCd(cd1); setP2SpecialCd(cd2); },
+          onGameOver: (winnerConfig) => { setWinner(winnerConfig); setScreen('victory'); },
+          onPeerDisconnected: () => { setPeerDisconnected(true); gameLoopRef.current?.pause(); },
+        }, mpRef.current ?? undefined, isHost);
+        gameLoopRef.current = gameLoop;
+      } catch (err) {
+        console.error('Game init failed:', err);
+        setScreen('modeSelect');
+      }
     };
 
-    initGame();
+    initGame().catch(console.error);
 
     return () => {
       mounted = false;
@@ -361,18 +378,46 @@ export function App() {
             background: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.15) 2px, rgba(0,0,0,0.15) 4px)',
           }} />
           <div style={{ zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <p style={{
-              fontFamily: 'var(--font-display)', color: 'rgba(255,255,255,0.5)',
-              fontSize: '14px', marginBottom: '24px', letterSpacing: '0.3em',
-              textTransform: 'uppercase', animation: 'neon-pulse 2s ease-in-out infinite',
-            }}>
-              Waiting for opponent's fighter...
-            </p>
-            <div style={{
-              width: '32px', height: '32px',
-              border: '2px solid rgba(0, 212, 255, 0.15)', borderTopColor: 'var(--neon-blue)',
-              borderRadius: '50%', animation: 'spin 0.8s linear infinite',
-            }} />
+            {waitingExpired ? (
+              <>
+                <p style={{
+                  fontFamily: 'var(--font-display)', color: 'var(--neon-pink)',
+                  fontSize: '14px', marginBottom: '12px', letterSpacing: '0.2em',
+                  textTransform: 'uppercase',
+                }}>
+                  Opponent didn't join. Room expired.
+                </p>
+                <button
+                  onClick={resetAll}
+                  className="btn-arcade"
+                  style={{
+                    marginTop: '16px', padding: '14px 40px', fontSize: '14px', fontWeight: 700,
+                    fontFamily: 'var(--font-display)',
+                    background: 'linear-gradient(135deg, rgba(0, 212, 255, 0.15), rgba(0, 100, 200, 0.1))',
+                    color: 'var(--neon-blue)', border: '1px solid rgba(0, 212, 255, 0.25)',
+                    borderRadius: '2px', textTransform: 'uppercase', letterSpacing: '0.15em',
+                    clipPath: 'polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px))',
+                  }}
+                >
+                  BACK TO MENU
+                </button>
+              </>
+            ) : (
+              <>
+                <p style={{
+                  fontFamily: 'var(--font-display)', color: 'rgba(255,255,255,0.5)',
+                  fontSize: '14px', marginBottom: '24px', letterSpacing: '0.3em',
+                  textTransform: 'uppercase', animation: 'neon-pulse 2s ease-in-out infinite',
+                }}>
+                  Waiting for opponent's fighter...
+                </p>
+                <div style={{
+                  width: '32px', height: '32px',
+                  border: '2px solid rgba(0, 212, 255, 0.15)', borderTopColor: 'var(--neon-blue)',
+                  borderRadius: '50%', animation: 'spin 0.8s linear infinite',
+                }} />
+              </>
+            )}
           </div>
         </div>
       )}
@@ -380,10 +425,10 @@ export function App() {
       {screen === 'vsScreen' && p1Config && p2Config && (
         <div style={{
           position: 'absolute', inset: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
           background: `
-            radial-gradient(ellipse at 30% 50%, ${p1Config.color_palette.primary}11 0%, transparent 40%),
-            radial-gradient(ellipse at 70% 50%, ${p2Config.color_palette.primary}11 0%, transparent 40%),
+            radial-gradient(ellipse at 50% 20%, ${p1Config.color_palette.primary}11 0%, transparent 40%),
+            radial-gradient(ellipse at 50% 80%, ${p2Config.color_palette.primary}11 0%, transparent 40%),
             linear-gradient(180deg, #06060f 0%, #0d0d24 50%, #06060f 100%)
           `,
           zIndex: 10, overflow: 'hidden',
@@ -392,30 +437,38 @@ export function App() {
             position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0.3,
             background: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.15) 2px, rgba(0,0,0,0.15) 4px)',
           }} />
-          <div style={{ textAlign: 'center', zIndex: 1 }}>
-            <span style={{
+          <div style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            gap: '16px', zIndex: 1, maxWidth: '80vw',
+          }}>
+            <div style={{
               fontFamily: 'var(--font-display)', color: p1Config.color_palette.primary,
               fontSize: 'clamp(28px, 5vw, 42px)', fontWeight: 900, textTransform: 'uppercase',
               letterSpacing: '0.05em', textShadow: `0 0 40px ${p1Config.color_palette.primary}44`,
               animation: 'slide-up 0.4s both',
+              maxWidth: '80vw', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              textAlign: 'center',
             }}>
               {p1Config.name}
-            </span>
-            <span style={{
+            </div>
+            <div style={{
               fontFamily: 'var(--font-display)', color: 'rgba(255,255,255,0.12)',
-              fontSize: 'clamp(36px, 6vw, 56px)', fontWeight: 900, margin: '0 28px',
+              fontSize: 'clamp(36px, 6vw, 56px)', fontWeight: 900,
               letterSpacing: '0.1em', animation: 'scale-in 0.3s 0.15s both',
+              textAlign: 'center',
             }}>
               VS
-            </span>
-            <span style={{
+            </div>
+            <div style={{
               fontFamily: 'var(--font-display)', color: p2Config.color_palette.primary,
               fontSize: 'clamp(28px, 5vw, 42px)', fontWeight: 900, textTransform: 'uppercase',
               letterSpacing: '0.05em', textShadow: `0 0 40px ${p2Config.color_palette.primary}44`,
               animation: 'slide-up 0.4s 0.1s both',
+              maxWidth: '80vw', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              textAlign: 'center',
             }}>
               {p2Config.name}
-            </span>
+            </div>
           </div>
         </div>
       )}

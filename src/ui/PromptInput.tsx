@@ -77,6 +77,20 @@ export function PromptInput({ playerNumber, onFighterReady, onBack }: PromptInpu
           Player {playerNumber} Fighter
         </p>
         <FighterCard config={fighter} onFight={() => onFighterReady(fighter)} />
+        {fighter.name === 'Default Dan' && (
+          <p style={{
+            fontFamily: 'var(--font-body)',
+            color: 'rgba(255, 200, 50, 0.7)',
+            fontSize: '13px',
+            marginTop: '16px',
+            textAlign: 'center',
+            maxWidth: '380px',
+            lineHeight: 1.5,
+            fontWeight: 500,
+          }}>
+            AI generation failed — using fallback fighter. Try a different description.
+          </p>
+        )}
       </div>
     );
   }
