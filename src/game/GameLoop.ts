@@ -95,7 +95,6 @@ export class GameLoop {
       const newH = this.app.renderer.height;
       if (newW !== this.arena.width || newH !== this.arena.height) {
         const oldW = this.arena.width;
-        const oldH = this.arena.height;
         this.arena.resize(newW, newH);
 
         // Reposition fighters proportionally to new arena size
