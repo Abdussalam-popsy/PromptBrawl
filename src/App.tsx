@@ -42,6 +42,7 @@ export function App() {
   const configResendRef = useRef<number | null>(null);
   const myConfigRef = useRef<FighterConfig | null>(null);
   const peerConfigRef = useRef<FighterConfig | null>(null);
+  const aiGeneratingRef = useRef(false);
 
   // Derive p1Config (left/host) and p2Config (right/guest) from myConfig + peerConfig
   // Host: p1=my, p2=peer. Guest: p1=peer, p2=my.
@@ -68,6 +69,7 @@ export function App() {
     setPeerDisconnected(false);
     setWaitingExpired(false);
     setConnectionError('');
+    aiGeneratingRef.current = false;
     stopConfigResend();
     mpRef.current?.disconnect();
     mpRef.current = null;
@@ -165,6 +167,8 @@ export function App() {
         setScreen('vsScreen');
       }
     } else if (mode === 'vsAI') {
+      if (aiGeneratingRef.current) return;
+      aiGeneratingRef.current = true;
       const aiPrompt = getRandomAIPrompt();
       const aiConfig = await generateFighter(aiPrompt);
       setPeerConfig(aiConfig);
@@ -206,10 +210,12 @@ export function App() {
     return () => clearTimeout(timer);
   }, [screen]);
 
-  // VS screen auto-advance to tutorial
+  // VS screen auto-advance to tutorial (one-way: never go backwards)
   useEffect(() => {
     if (screen === 'vsScreen') {
-      const timer = setTimeout(() => setScreen('tutorial'), 2000);
+      const timer = setTimeout(() => {
+        setScreen(prev => prev === 'vsScreen' ? 'tutorial' : prev);
+      }, 2000);
       return () => clearTimeout(timer);
     }
   }, [screen]);
@@ -288,6 +294,7 @@ export function App() {
         gameLoopRef.current = gameLoop;
       } catch (err) {
         console.error('Game init failed:', err);
+        aiGeneratingRef.current = false;
         setScreen('modeSelect');
       }
     };
