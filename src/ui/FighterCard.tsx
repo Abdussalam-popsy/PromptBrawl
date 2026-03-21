@@ -144,10 +144,10 @@ export function FighterCard({ config, onFight }: FighterCardProps) {
       </div>
 
       {/* Stats */}
-      <StatBar label="SPD" value={config.stats.speed} max={10} color="var(--neon-blue)" />
-      <StatBar label="DMG" value={config.stats.damage} max={10} color="var(--neon-pink)" />
-      <StatBar label="DEF" value={config.stats.defense} max={10} color="var(--neon-green)" />
-      <StatBar label="CHS" value={config.stats.chaos} max={10} color="var(--neon-purple)" />
+      <StatBar label="SPD" value={config.stats.speed} max={10} color="#00d4ff" />
+      <StatBar label="DMG" value={config.stats.damage} max={10} color="#ff2d7b" />
+      <StatBar label="DEF" value={config.stats.defense} max={10} color="#00ff88" />
+      <StatBar label="CHS" value={config.stats.chaos} max={10} color="#b44dff" />
 
       {/* Victory line */}
       <p style={{
