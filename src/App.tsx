@@ -292,8 +292,8 @@ export function App() {
   const localConfig = isHost ? p1Config : p2Config;
   const localSpecialCd = isHost ? p1SpecialCd : p2SpecialCd;
 
-  // On mobile (narrow screens), use stacked layout: game on top, controls below
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  // Phone = narrow portrait screen. Tablet/desktop unchanged.
+  const isPhone = typeof window !== 'undefined' && window.innerWidth < 640;
 
   return (
     <div style={{
@@ -302,13 +302,23 @@ export function App() {
       overflow: 'hidden',
       background: '#06060f',
       position: 'relative',
-      display: screen === 'fighting' && isMobile ? 'flex' : 'block',
-      flexDirection: 'column',
+      ...(screen === 'fighting' && isPhone ? {
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+      } : {}),
     }}>
-      {/* PixiJS canvas container */}
+      {/* PixiJS canvas container — on phone: 16:9 centered box; else: fullscreen */}
       <div ref={canvasRef} style={
-        screen === 'fighting' && isMobile
-          ? { flex: 1, position: 'relative', minHeight: 0 }
+        screen === 'fighting' && isPhone
+          ? {
+              width: '100%',
+              // 16:9 aspect ratio
+              aspectRatio: '16 / 9',
+              flexShrink: 0,
+              position: 'relative',
+            }
           : { position: 'absolute', inset: 0 }
       } />
 
@@ -439,13 +449,13 @@ export function App() {
             const primaryColor = localConfig?.color_palette.primary ?? '#00d4ff';
 
             const dpadBtn: React.CSSProperties = {
-              width: isMobile ? '64px' : '80px',
-              height: isMobile ? '50px' : '60px',
+              width: isPhone ? '64px' : '80px',
+              height: isPhone ? '50px' : '60px',
               background: 'rgba(255,255,255,0.08)',
               border: '1px solid rgba(255,255,255,0.12)',
               borderRadius: '6px',
               color: 'rgba(255,255,255,0.5)',
-              fontSize: isMobile ? '20px' : '24px',
+              fontSize: isPhone ? '20px' : '24px',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               touchAction: 'manipulation',
               WebkitTapHighlightColor: 'transparent',
@@ -453,8 +463,8 @@ export function App() {
             };
 
             const atkBtn: React.CSSProperties = {
-              minHeight: isMobile ? '50px' : '80px',
-              minWidth: isMobile ? '60px' : '80px',
+              minHeight: isPhone ? '50px' : '80px',
+              minWidth: isPhone ? '60px' : '80px',
               fontFamily: 'var(--font-display)',
               fontWeight: 700,
               borderRadius: '6px',
@@ -466,24 +476,25 @@ export function App() {
               alignItems: 'center',
               justifyContent: 'center',
               gap: '2px',
-              padding: isMobile ? '0 10px' : '0 16px',
+              padding: isPhone ? '0 10px' : '0 16px',
             };
 
             return (
               <div style={
-                isMobile
+                isPhone
                   ? {
-                      // Fixed strip below the game canvas
-                      flexShrink: 0,
-                      height: '140px',
+                      // Controls in the black bar below the 16:9 game
+                      width: '100%',
+                      flex: 1,
                       background: '#06060f',
                       borderTop: '1px solid rgba(255,255,255,0.06)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
-                      padding: '8px 12px',
+                      padding: '8px 16px',
                       zIndex: 6,
                       userSelect: 'none',
+                      minHeight: 0,
                     }
                   : {
                       // Desktop: overlaid at bottom
@@ -544,8 +555,8 @@ export function App() {
                       boxShadow: '0 0 15px rgba(0, 212, 255, 0.1)',
                     }}
                   >
-                    <span style={{ fontSize: isMobile ? '16px' : '20px', lineHeight: 1, opacity: 0.8 }}>&#9876;</span>
-                    <span style={{ letterSpacing: '0.1em', textTransform: 'uppercase', fontSize: isMobile ? '9px' : '11px' }}>ATK</span>
+                    <span style={{ fontSize: isPhone ? '16px' : '20px', lineHeight: 1, opacity: 0.8 }}>&#9876;</span>
+                    <span style={{ letterSpacing: '0.1em', textTransform: 'uppercase', fontSize: isPhone ? '9px' : '11px' }}>ATK</span>
                   </button>
 
                   <button
@@ -558,8 +569,8 @@ export function App() {
                       boxShadow: '0 0 15px rgba(255, 136, 0, 0.1)',
                     }}
                   >
-                    <span style={{ fontSize: isMobile ? '16px' : '20px', lineHeight: 1, opacity: 0.8 }}>&#128165;</span>
-                    <span style={{ letterSpacing: '0.1em', textTransform: 'uppercase', fontSize: isMobile ? '9px' : '11px' }}>HVY</span>
+                    <span style={{ fontSize: isPhone ? '16px' : '20px', lineHeight: 1, opacity: 0.8 }}>&#128165;</span>
+                    <span style={{ letterSpacing: '0.1em', textTransform: 'uppercase', fontSize: isPhone ? '9px' : '11px' }}>HVY</span>
                   </button>
 
                   <button
@@ -577,8 +588,8 @@ export function App() {
                       boxShadow: onCooldown ? 'none' : `0 0 15px ${accentColor}15`,
                     }}
                   >
-                    <span style={{ fontSize: isMobile ? '14px' : '18px', lineHeight: 1, opacity: 0.8 }}>{onCooldown ? '\u23F3' : '\u2728'}</span>
-                    <span style={{ letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: isMobile ? '8px' : '10px' }}>
+                    <span style={{ fontSize: isPhone ? '14px' : '18px', lineHeight: 1, opacity: 0.8 }}>{onCooldown ? '\u23F3' : '\u2728'}</span>
+                    <span style={{ letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: isPhone ? '8px' : '10px' }}>
                       {onCooldown ? `${cooldownSec}s` : specialName}
                     </span>
                   </button>
