@@ -23,6 +23,7 @@ interface Particle {
 
 export class CombatSystem {
   private stageContainer: Container;
+  private pendingTimers: ReturnType<typeof setTimeout>[] = [];
   private projectiles: Projectile[] = [];
   private particles: Particle[] = [];
   private particleContainer: Container;
@@ -101,7 +102,7 @@ export class CombatSystem {
     }
 
     // Schedule hit check after startup
-    setTimeout(() => {
+    const id = setTimeout(() => {
       if (attacker.state === 'dead') return;
 
       if (moveDef.isProjectile) {
@@ -110,6 +111,7 @@ export class CombatSystem {
         this.checkMeleeHit(attacker, defender, moveDef);
       }
     }, moveDef.startup);
+    this.pendingTimers.push(id);
   }
 
   private checkMeleeHit(attacker: Fighter, defender: Fighter, moveDef: MoveDefinition): void {
@@ -278,6 +280,12 @@ export class CombatSystem {
   }
 
   cleanup(): void {
+    this.pendingTimers.forEach(id => clearTimeout(id));
+    this.pendingTimers = [];
+
+    gsap.killTweensOf(this.stageContainer);
+    gsap.globalTimeline.clear();
+
     for (const proj of this.projectiles) {
       this.projectileContainer.removeChild(proj.graphic);
       proj.graphic.destroy();

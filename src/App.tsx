@@ -320,11 +320,22 @@ export function App() {
           onSpecialCooldown: (cd1, cd2) => { setP1SpecialCd(cd1); setP2SpecialCd(cd2); },
           onGameOver: (winnerConfig) => {
             console.log('[GameOver] Winner:', winnerConfig.name);
-            // Destroy game loop BEFORE screen transition to prevent null refs
-            gameLoopRef.current?.destroy();
-            gameLoopRef.current = null;
             setWinner(winnerConfig);
             setScreen('victory');
+            try {
+              gameLoopRef.current?.destroy();
+            } catch (e) {
+              console.warn('GameLoop destroy error (non-fatal):', e);
+            }
+            gameLoopRef.current = null;
+            // Remove PixiJS canvas and destroy app to fully clear the GL overlay
+            if (appRef.current) {
+              try { appRef.current.destroy(true); } catch (_) { /* non-fatal */ }
+              appRef.current = null;
+            }
+            if (canvasRef.current) {
+              canvasRef.current.innerHTML = '';
+            }
           },
           onPeerDisconnected: () => { setPeerDisconnected(true); gameLoopRef.current?.pause(); },
         }, mpRef.current ?? undefined, isHost);
