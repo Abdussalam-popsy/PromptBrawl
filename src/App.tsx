@@ -233,22 +233,37 @@ export function App() {
 
     let mounted = true;
 
+    let resizeHandler: (() => void) | null = null;
+
     const initGame = async () => {
-      if (!canvasRef.current) return;
+      const container = canvasRef.current;
+      if (!container) return;
+
+      // Ensure container fills parent, then force layout to get actual pixel dimensions
+      container.style.width = '100%';
+      container.style.height = '100%';
+      const rect = container.getBoundingClientRect();
 
       const app = new Application();
-      // resizeTo the container div which tracks the visual viewport
       await app.init({
         background: '#0a0a1a',
-        resizeTo: canvasRef.current,
+        width: rect.width,
+        height: rect.height,
+        resizeTo: container,
         antialias: true,
         preference: 'webgl',
       });
 
       if (!mounted) return;
 
-      canvasRef.current.appendChild(app.canvas as HTMLCanvasElement);
+      container.appendChild(app.canvas as HTMLCanvasElement);
       appRef.current = app;
+
+      // Resize listener to keep PixiJS in sync with container
+      resizeHandler = () => {
+        app.renderer.resize(container.clientWidth, container.clientHeight);
+      };
+      window.addEventListener('resize', resizeHandler);
 
       const gameLoop = new GameLoop(app, p1Config, p2Config, mode, {
         onHealthChange: (h1, h2) => { setP1Hp(h1); setP2Hp(h2); },
@@ -263,6 +278,7 @@ export function App() {
 
     return () => {
       mounted = false;
+      if (resizeHandler) window.removeEventListener('resize', resizeHandler);
       gameLoopRef.current?.destroy();
       gameLoopRef.current = null;
       if (appRef.current) {
@@ -275,6 +291,20 @@ export function App() {
   const handleAttackButton = useCallback((action: 'lightAttack' | 'heavyAttack' | 'special') => {
     gameLoopRef.current?.triggerButton(action);
   }, []);
+
+  const handleDpadDown = useCallback((direction: 'left' | 'right') => {
+    gameLoopRef.current?.controls.setTouchDirection(direction, true);
+  }, []);
+
+  const handleDpadUp = useCallback((direction: 'left' | 'right') => {
+    gameLoopRef.current?.controls.setTouchDirection(direction, false);
+  }, []);
+
+  const handleJumpButton = useCallback(() => {
+    gameLoopRef.current?.triggerButton('jump');
+  }, []);
+
+  const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
   // Determine special info for the local player's fighter
   const localConfig = isHost ? p1Config : p2Config;
@@ -434,6 +464,25 @@ export function App() {
               padding: '0 16px',
             };
 
+            const dpadBtn: React.CSSProperties = {
+              minHeight: '70px',
+              minWidth: '70px',
+              fontFamily: 'var(--font-display)',
+              fontWeight: 700,
+              borderRadius: '6px',
+              cursor: 'pointer',
+              touchAction: 'manipulation',
+              WebkitTapHighlightColor: 'transparent',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'rgba(255, 255, 255, 0.06)',
+              color: 'rgba(255, 255, 255, 0.5)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              fontSize: '24px',
+              padding: 0,
+            };
+
             return (
               <div style={{
                 position: 'absolute',
@@ -442,11 +491,41 @@ export function App() {
                 right: '20px',
                 display: 'flex',
                 alignItems: 'flex-end',
-                justifyContent: 'flex-end',
+                justifyContent: 'space-between',
                 zIndex: 6,
                 userSelect: 'none',
                 pointerEvents: 'none',
               }}>
+                {/* D-pad — left side (touch devices only) */}
+                {isTouchDevice ? (
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-end', pointerEvents: 'auto' }}>
+                    <button
+                      onPointerDown={(e) => { e.preventDefault(); handleDpadDown('left'); }}
+                      onPointerUp={(e) => { e.preventDefault(); handleDpadUp('left'); }}
+                      onPointerLeave={(e) => { e.preventDefault(); handleDpadUp('left'); }}
+                      onPointerCancel={(e) => { e.preventDefault(); handleDpadUp('left'); }}
+                      style={dpadBtn}
+                    >
+                      &#9664;
+                    </button>
+                    <button
+                      onPointerDown={(e) => { e.preventDefault(); handleJumpButton(); }}
+                      style={{ ...dpadBtn, minHeight: '80px' }}
+                    >
+                      &#9650;
+                    </button>
+                    <button
+                      onPointerDown={(e) => { e.preventDefault(); handleDpadDown('right'); }}
+                      onPointerUp={(e) => { e.preventDefault(); handleDpadUp('right'); }}
+                      onPointerLeave={(e) => { e.preventDefault(); handleDpadUp('right'); }}
+                      onPointerCancel={(e) => { e.preventDefault(); handleDpadUp('right'); }}
+                      style={dpadBtn}
+                    >
+                      &#9654;
+                    </button>
+                  </div>
+                ) : <div />}
+
                 {/* Attack buttons — right side */}
                 <div style={{ display: 'flex', gap: '6px', pointerEvents: 'auto' }}>
                   <button
