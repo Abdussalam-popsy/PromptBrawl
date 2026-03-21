@@ -9,6 +9,8 @@ interface LobbyProps {
   roomCode: string;
   isHost: boolean;
   peerJoined: boolean;
+  connectionError: string;
+  onRetry: () => void;
 }
 
 export function Lobby({
@@ -19,6 +21,8 @@ export function Lobby({
   roomCode,
   isHost,
   peerJoined,
+  connectionError,
+  onRetry,
 }: LobbyProps) {
   const [joinCode, setJoinCode] = useState('');
   const [error, setError] = useState('');
@@ -241,6 +245,44 @@ export function Lobby({
           </p>
         )}
 
+        {connectionError && (
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '12px',
+            marginBottom: '24px',
+            animation: 'fade-in 0.3s both',
+          }}>
+            <p style={{
+              fontFamily: 'var(--font-mono)',
+              color: 'var(--neon-pink)',
+              fontSize: '12px',
+              letterSpacing: '0.05em',
+            }}>
+              CONNECTION FAILED: {connectionError}
+            </p>
+            <button
+              onClick={onRetry}
+              className="btn-arcade"
+              style={{
+                padding: '10px 28px',
+                fontSize: '13px',
+                fontWeight: 700,
+                fontFamily: 'var(--font-display)',
+                background: 'linear-gradient(135deg, rgba(0, 212, 255, 0.15), rgba(0, 100, 200, 0.1))',
+                color: 'var(--neon-blue)',
+                border: '1px solid rgba(0, 212, 255, 0.25)',
+                borderRadius: '2px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.1em',
+              }}
+            >
+              RETRY
+            </button>
+          </div>
+        )}
+
         <div style={{
           display: 'flex',
           gap: '24px',
@@ -287,17 +329,17 @@ export function Lobby({
             </p>
             <button
               onClick={handleCreate}
-              disabled={loading}
+              disabled={loading || connectionStatus !== 'connected'}
               className="btn-arcade"
               style={{
                 padding: '14px 36px',
                 fontSize: '15px',
                 fontWeight: 700,
                 fontFamily: 'var(--font-display)',
-                background: loading
+                background: (loading || connectionStatus !== 'connected')
                   ? 'rgba(0, 212, 255, 0.05)'
                   : 'linear-gradient(135deg, rgba(0, 212, 255, 0.15), rgba(0, 100, 200, 0.1))',
-                color: loading ? 'rgba(255,255,255,0.3)' : 'var(--neon-blue)',
+                color: (loading || connectionStatus !== 'connected') ? 'rgba(255,255,255,0.3)' : 'var(--neon-blue)',
                 border: '1px solid rgba(0, 212, 255, 0.25)',
                 borderRadius: '2px',
                 textTransform: 'uppercase',
@@ -305,7 +347,7 @@ export function Lobby({
                 clipPath: 'polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px))',
               }}
             >
-              {loading ? 'CREATING...' : 'CREATE ROOM'}
+              {connectionStatus === 'connecting' ? 'CONNECTING...' : loading ? 'CREATING...' : 'CREATE ROOM'}
             </button>
           </div>
 
@@ -392,17 +434,17 @@ export function Lobby({
             />
             <button
               onClick={handleJoin}
-              disabled={loading || joinCode.length !== 4}
+              disabled={loading || joinCode.length !== 4 || connectionStatus !== 'connected'}
               className="btn-arcade"
               style={{
                 padding: '14px 36px',
                 fontSize: '15px',
                 fontWeight: 700,
                 fontFamily: 'var(--font-display)',
-                background: (loading || joinCode.length !== 4)
+                background: (loading || joinCode.length !== 4 || connectionStatus !== 'connected')
                   ? 'rgba(255, 45, 123, 0.05)'
                   : 'linear-gradient(135deg, rgba(255, 45, 123, 0.15), rgba(200, 20, 80, 0.1))',
-                color: (loading || joinCode.length !== 4) ? 'rgba(255,255,255,0.2)' : 'var(--neon-pink)',
+                color: (loading || joinCode.length !== 4 || connectionStatus !== 'connected') ? 'rgba(255,255,255,0.2)' : 'var(--neon-pink)',
                 border: '1px solid rgba(255, 45, 123, 0.25)',
                 borderRadius: '2px',
                 textTransform: 'uppercase',
@@ -410,7 +452,7 @@ export function Lobby({
                 clipPath: 'polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px))',
               }}
             >
-              {loading ? 'JOINING...' : 'JOIN ROOM'}
+              {connectionStatus === 'connecting' ? 'CONNECTING...' : loading ? 'JOINING...' : 'JOIN ROOM'}
             </button>
           </div>
         </div>

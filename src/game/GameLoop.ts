@@ -8,12 +8,13 @@ import { type FighterConfig } from '../ai/fighterConfig';
 import { type MultiplayerSession } from '../network/multiplayer';
 import { SYNC_RATE_MS, type StateMessage, type ActionMessage } from '../network/syncProtocol';
 
-export type GameMode = 'vsAI' | 'vsPlayer' | 'vsOnline';
+export type GameMode = 'vsAI' | 'vsOnline';
 
 export interface GameCallbacks {
   onHealthChange: (p1Hp: number, p2Hp: number) => void;
   onSpecialCooldown: (p1Cd: number, p2Cd: number) => void;
   onGameOver: (winner: FighterConfig) => void;
+  onPeerDisconnected?: () => void;
 }
 
 export class GameLoop {
@@ -106,10 +107,9 @@ export class GameLoop {
     };
 
     this.multiplayer.onPeerLeft = () => {
-      // Opponent disconnected — they forfeit
       if (!this.gameOver) {
         this.gameOver = true;
-        this.callbacks.onGameOver(this.p1.config);
+        this.callbacks.onPeerDisconnected?.();
       }
     };
   }
@@ -150,14 +150,10 @@ export class GameLoop {
       if (p1Input.special) this.multiplayer.sendAction('special');
     }
 
-    // P2 input: AI mode uses AI, online mode uses remote state (applied via callback), local mode uses empty
+    // P2 input: AI mode uses AI, online mode uses remote state (applied via callback)
     if (this.ai) {
       const p2Input = this.ai.getInput(this.p2, this.p1);
       this.combat.applyInput(this.p2, p2Input, this.p1);
-    } else if (!this.multiplayer) {
-      // Local vsPlayer — no input for P2 (on-screen buttons not supported for P2)
-      const emptyInput = { left: false, right: false, jump: false, lightAttack: false, heavyAttack: false, special: false };
-      this.combat.applyInput(this.p2, emptyInput, this.p1);
     }
     // vsOnline: P2 input is handled via multiplayer.onAction callback
 

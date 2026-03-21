@@ -32,6 +32,7 @@ export class MultiplayerSession {
   onPeerJoined: (() => void) | null = null;
   onPeerLeft: (() => void) | null = null;
   onFighterConfig: ((config: FighterConfig) => void) | null = null;
+  onGameStart: (() => void) | null = null;
   onState: ((state: StateMessage) => void) | null = null;
   onAction: ((action: ActionMessage) => void) | null = null;
   onConnectionChange: ((status: ConnectionStatus) => void) | null = null;
@@ -129,6 +130,9 @@ export class MultiplayerSession {
           case 'attack':
             this.onAction?.(data);
             break;
+          case 'game_start':
+            this.onGameStart?.();
+            break;
         }
       } catch (err) {
         console.error('[multiplayer] Failed to parse message:', err);
@@ -144,6 +148,11 @@ export class MultiplayerSession {
         this.onPeerLeft?.();
       }
     });
+  }
+
+  sendGameStart(): void {
+    const msg: GameMessage = { type: 'game_start' };
+    this.channel?.publish('game', JSON.stringify(msg));
   }
 
   sendFighterConfig(config: FighterConfig): void {

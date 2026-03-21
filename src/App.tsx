@@ -13,7 +13,7 @@ import { VictoryScreen } from './ui/VictoryScreen';
 import { Lobby } from './ui/Lobby';
 import { MultiplayerSession, type ConnectionStatus } from './network/multiplayer';
 
-type Screen = 'modeSelect' | 'lobby' | 'p1Prompt' | 'p2Prompt' | 'vsScreen' | 'tutorial' | 'fighting' | 'victory';
+type Screen = 'modeSelect' | 'lobby' | 'p1Prompt' | 'waitingForPeer' | 'vsScreen' | 'tutorial' | 'fighting' | 'victory';
 
 export function App() {
   const [screen, setScreen] = useState<Screen>('modeSelect');
@@ -30,31 +30,100 @@ export function App() {
   const [roomCode, setRoomCode] = useState('');
   const [isHost, setIsHost] = useState(false);
   const [peerJoined, setPeerJoined] = useState(false);
+  const [peerDisconnected, setPeerDisconnected] = useState(false);
+  const [connectionError, setConnectionError] = useState('');
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
   const gameLoopRef = useRef<GameLoop | null>(null);
   const mpRef = useRef<MultiplayerSession | null>(null);
+  const configResendRef = useRef<number | null>(null);
+  // Use refs for configs to avoid stale closures
+  const p1ConfigRef = useRef<FighterConfig | null>(null);
+  const p2ConfigRef = useRef<FighterConfig | null>(null);
+
+  const stopConfigResend = useCallback(() => {
+    if (configResendRef.current !== null) {
+      clearInterval(configResendRef.current);
+      configResendRef.current = null;
+    }
+  }, []);
+
+  const resetAll = useCallback(() => {
+    setPaused(false);
+    setScreen('modeSelect');
+    setP1Config(null);
+    setP2Config(null);
+    p1ConfigRef.current = null;
+    p2ConfigRef.current = null;
+    setWinner(null);
+    setP1Hp(100);
+    setP2Hp(100);
+    setPeerDisconnected(false);
+    setConnectionError('');
+    stopConfigResend();
+    mpRef.current?.disconnect();
+    mpRef.current = null;
+    setRoomCode('');
+    setIsHost(false);
+    setPeerJoined(false);
+    setConnectionStatus('disconnected');
+  }, [stopConfigResend]);
 
   const handleModeSelect = useCallback((selectedMode: GameMode) => {
     setMode(selectedMode);
     if (selectedMode === 'vsOnline') {
       setScreen('lobby');
-      // Connect to Ably
+      setConnectionError('');
       const session = new MultiplayerSession();
       mpRef.current = session;
       session.onConnectionChange = (status) => setConnectionStatus(status);
       const clientId = `player-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      setConnectionStatus('connecting');
       session.connect(clientId).then(() => {
         setConnectionStatus('connected');
       }).catch(err => {
         console.error('[multiplayer] Connection failed:', err);
         setConnectionStatus('disconnected');
+        setConnectionError(err instanceof Error ? err.message : 'Connection failed');
       });
     } else {
       setScreen('p1Prompt');
     }
   }, []);
+
+  const handleRetryConnection = useCallback(() => {
+    setConnectionError('');
+    mpRef.current?.disconnect();
+    const session = new MultiplayerSession();
+    mpRef.current = session;
+    session.onConnectionChange = (status) => setConnectionStatus(status);
+    const clientId = `player-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    setConnectionStatus('connecting');
+    session.connect(clientId).then(() => {
+      setConnectionStatus('connected');
+    }).catch(err => {
+      console.error('[multiplayer] Retry failed:', err);
+      setConnectionStatus('disconnected');
+      setConnectionError(err instanceof Error ? err.message : 'Connection failed');
+    });
+  }, []);
+
+  // Check if both configs ready and trigger game start (host only)
+  const checkBothReady = useCallback(() => {
+    const session = mpRef.current;
+    if (!session) return;
+    const myConfig = p1ConfigRef.current;
+    const peerConfig = p2ConfigRef.current;
+    if (myConfig && peerConfig) {
+      stopConfigResend();
+      if (session.isHost) {
+        // Host sends game_start
+        session.sendGameStart();
+      }
+      setScreen('vsScreen');
+    }
+  }, [stopConfigResend]);
 
   const handleCreateRoom = useCallback(async (): Promise<string> => {
     const session = mpRef.current;
@@ -62,7 +131,6 @@ export function App() {
     const code = await session.createRoom();
     setRoomCode(code);
     setIsHost(true);
-    // When peer joins, move to prompt screen
     session.onPeerJoined = () => {
       setPeerJoined(true);
       setScreen('p1Prompt');
@@ -76,9 +144,7 @@ export function App() {
     await session.joinRoom(code);
     setRoomCode(code);
     setIsHost(false);
-    // Move to prompt screen immediately after joining
     setScreen('p1Prompt');
-    // Listen for host's fighter config
     session.onPeerJoined = () => {
       setPeerJoined(true);
     };
@@ -86,42 +152,62 @@ export function App() {
 
   const handleP1Ready = useCallback(async (config: FighterConfig) => {
     setP1Config(config);
+    p1ConfigRef.current = config;
 
     if (mode === 'vsOnline') {
-      // Send our fighter config to peer
-      mpRef.current?.sendFighterConfig(config);
-      // If we already have peer's config, proceed
-      if (p2Config) {
-        setScreen('vsScreen');
-      }
-      // Otherwise wait — onFighterConfig callback will advance
+      const session = mpRef.current;
+      if (!session) return;
+      // Send config immediately
+      session.sendFighterConfig(config);
+      // Resend every 500ms until both configs are confirmed
+      stopConfigResend();
+      configResendRef.current = window.setInterval(() => {
+        // Keep resending until we have both configs
+        if (p2ConfigRef.current) {
+          stopConfigResend();
+          return;
+        }
+        session.sendFighterConfig(config);
+      }, 500);
+      // Show waiting screen
+      setScreen('waitingForPeer');
+      // Check if we already have peer config
+      checkBothReady();
     } else if (mode === 'vsAI') {
-      // Auto-generate AI opponent
       const aiPrompt = getRandomAIPrompt();
       const aiConfig = await generateFighter(aiPrompt);
       setP2Config(aiConfig);
+      p2ConfigRef.current = aiConfig;
       setScreen('vsScreen');
-    } else {
-      setScreen('p2Prompt');
     }
-  }, [mode, p2Config]);
+  }, [mode, stopConfigResend, checkBothReady]);
 
-  const handleP2Ready = useCallback((config: FighterConfig) => {
-    setP2Config(config);
-    setScreen('vsScreen');
-  }, []);
-
-  // Listen for peer fighter config in online mode
+  // Listen for peer fighter config and game_start in online mode
   useEffect(() => {
     if (mode !== 'vsOnline' || !mpRef.current) return;
-    mpRef.current.onFighterConfig = (remoteConfig: FighterConfig) => {
+    const session = mpRef.current;
+
+    session.onFighterConfig = (remoteConfig: FighterConfig) => {
       setP2Config(remoteConfig);
-      // If we already have our own config, advance to VS screen
-      if (p1Config) {
+      p2ConfigRef.current = remoteConfig;
+      // If we also have our config, we're both ready
+      if (p1ConfigRef.current) {
+        stopConfigResend();
+        if (session.isHost) {
+          session.sendGameStart();
+        }
         setScreen('vsScreen');
       }
     };
-  }, [mode, p1Config]);
+
+    session.onGameStart = () => {
+      // Guest receives game_start from host
+      if (p1ConfigRef.current && p2ConfigRef.current) {
+        stopConfigResend();
+        setScreen('vsScreen');
+      }
+    };
+  }, [mode, stopConfigResend]);
 
   // VS screen auto-advance to tutorial
   useEffect(() => {
@@ -164,23 +250,6 @@ export function App() {
     setPaused(false);
   }, []);
 
-  const handleQuit = useCallback(() => {
-    setPaused(false);
-    setScreen('modeSelect');
-    setP1Config(null);
-    setP2Config(null);
-    setWinner(null);
-    setP1Hp(100);
-    setP2Hp(100);
-    // Cleanup multiplayer
-    mpRef.current?.disconnect();
-    mpRef.current = null;
-    setRoomCode('');
-    setIsHost(false);
-    setPeerJoined(false);
-    setConnectionStatus('disconnected');
-  }, []);
-
   // Start the game when entering fighting screen
   useEffect(() => {
     if (screen !== 'fighting' || !p1Config || !p2Config) return;
@@ -214,6 +283,10 @@ export function App() {
           setWinner(winnerConfig);
           setScreen('victory');
         },
+        onPeerDisconnected: () => {
+          setPeerDisconnected(true);
+          gameLoopRef.current?.pause();
+        },
       }, mpRef.current ?? undefined);
       gameLoopRef.current = gameLoop;
     };
@@ -235,22 +308,6 @@ export function App() {
     gameLoopRef.current?.triggerButton(action);
   }, []);
 
-  const handlePlayAgain = useCallback(() => {
-    setScreen('modeSelect');
-    setP1Config(null);
-    setP2Config(null);
-    setWinner(null);
-    setP1Hp(100);
-    setP2Hp(100);
-    // Cleanup multiplayer
-    mpRef.current?.disconnect();
-    mpRef.current = null;
-    setRoomCode('');
-    setIsHost(false);
-    setPeerJoined(false);
-    setConnectionStatus('disconnected');
-  }, []);
-
   return (
     <div style={{
       width: '100vw',
@@ -269,13 +326,15 @@ export function App() {
 
       {screen === 'lobby' && (
         <Lobby
-          onBack={() => { handleQuit(); }}
+          onBack={() => { resetAll(); }}
           onCreateRoom={handleCreateRoom}
           onJoinRoom={handleJoinRoom}
           connectionStatus={connectionStatus}
           roomCode={roomCode}
           isHost={isHost}
           peerJoined={peerJoined}
+          connectionError={connectionError}
+          onRetry={handleRetryConnection}
         />
       )}
 
@@ -287,12 +346,44 @@ export function App() {
         />
       )}
 
-      {screen === 'p2Prompt' && (
-        <PromptInput
-          playerNumber={2}
-          onFighterReady={handleP2Ready}
-          onBack={() => setScreen('p1Prompt')}
-        />
+      {/* Waiting for peer's config after submitting own */}
+      {screen === 'waitingForPeer' && (
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'linear-gradient(180deg, #06060f 0%, #0d0d24 50%, #06060f 100%)',
+          zIndex: 10,
+        }}>
+          <div style={{
+            position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0.3,
+            background: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.15) 2px, rgba(0,0,0,0.15) 4px)',
+          }} />
+          <div style={{ zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <p style={{
+              fontFamily: 'var(--font-display)',
+              color: 'rgba(255,255,255,0.5)',
+              fontSize: '14px',
+              marginBottom: '24px',
+              letterSpacing: '0.3em',
+              textTransform: 'uppercase',
+              animation: 'neon-pulse 2s ease-in-out infinite',
+            }}>
+              Waiting for opponent's fighter...
+            </p>
+            <div style={{
+              width: '32px',
+              height: '32px',
+              border: '2px solid rgba(0, 212, 255, 0.15)',
+              borderTopColor: 'var(--neon-blue)',
+              borderRadius: '50%',
+              animation: 'spin 0.8s linear infinite',
+            }} />
+          </div>
+        </div>
       )}
 
       {screen === 'vsScreen' && p1Config && p2Config && (
@@ -375,7 +466,7 @@ export function App() {
           />
 
           {/* On-screen attack buttons */}
-          {!paused && (() => {
+          {!paused && !peerDisconnected && (() => {
             const specialName = SPECIAL_DEFS[p1Config.move_loadout.special]?.name
               ?? p1Config.move_loadout.special.replace(/_/g, ' ');
             const cooldownSec = Math.ceil(Math.max(0, p1SpecialCd) / 1000);
@@ -483,19 +574,95 @@ export function App() {
             );
           })()}
 
-          {paused && (
+          {/* Peer disconnected overlay */}
+          {peerDisconnected && (
+            <div style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'rgba(4, 4, 12, 0.92)',
+              backdropFilter: 'blur(8px)',
+              zIndex: 30,
+              animation: 'fade-in 0.2s both',
+            }}>
+              <div style={{
+                position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0.2,
+                background: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.2) 2px, rgba(0,0,0,0.2) 4px)',
+              }} />
+              <div style={{ zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <div style={{
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '50%',
+                  background: 'rgba(255, 45, 123, 0.1)',
+                  border: '2px solid rgba(255, 45, 123, 0.3)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: '20px',
+                  fontSize: '24px',
+                }}>
+                  &#x26A0;
+                </div>
+                <h2 style={{
+                  fontFamily: 'var(--font-display)',
+                  fontSize: '28px',
+                  fontWeight: 900,
+                  color: 'var(--neon-pink)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.1em',
+                  marginBottom: '12px',
+                }}>
+                  OPPONENT DISCONNECTED
+                </h2>
+                <p style={{
+                  fontFamily: 'var(--font-body)',
+                  color: 'rgba(255,255,255,0.4)',
+                  fontSize: '15px',
+                  fontWeight: 500,
+                  marginBottom: '32px',
+                }}>
+                  Your opponent has left the match
+                </p>
+                <button
+                  onClick={resetAll}
+                  className="btn-arcade"
+                  style={{
+                    padding: '16px 48px',
+                    fontSize: '16px',
+                    fontWeight: 700,
+                    fontFamily: 'var(--font-display)',
+                    background: 'linear-gradient(135deg, rgba(0, 212, 255, 0.15), rgba(0, 100, 200, 0.1))',
+                    color: 'var(--neon-blue)',
+                    border: '1px solid rgba(0, 212, 255, 0.25)',
+                    borderRadius: '2px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.15em',
+                    clipPath: 'polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px))',
+                  }}
+                >
+                  RETURN TO MENU
+                </button>
+              </div>
+            </div>
+          )}
+
+          {paused && !peerDisconnected && (
             <PauseMenu
               p1Config={p1Config}
               p2Config={p2Config}
               onResume={handleResume}
-              onQuit={handleQuit}
+              onQuit={resetAll}
             />
           )}
         </>
       )}
 
       {screen === 'victory' && winner && (
-        <VictoryScreen winner={winner} onPlayAgain={handlePlayAgain} />
+        <VictoryScreen winner={winner} onPlayAgain={resetAll} />
       )}
     </div>
   );
