@@ -157,7 +157,9 @@ export class Fighter {
   // Animation
   private animFrame: number = 0;
   private idlePhase: number = 0;
+  private flashOverlay: Graphics | null = null;
   private flashTimer: ReturnType<typeof setTimeout> | null = null;
+  private expressionTimer: ReturnType<typeof setTimeout> | null = null;
   private currentExpression: EyeExpression;
   private screenScale: number = 1;
 
@@ -934,7 +936,9 @@ export class Fighter {
     this.grounded = false;
 
     this.setExpression('scared');
-    setTimeout(() => {
+    if (this.expressionTimer !== null) clearTimeout(this.expressionTimer);
+    this.expressionTimer = setTimeout(() => {
+      this.expressionTimer = null;
       if (this.state !== 'dead') {
         this.setExpression(this.config.eye_expression);
       }
@@ -956,20 +960,27 @@ export class Fighter {
       clearTimeout(this.flashTimer);
       this.flashTimer = null;
     }
-
-    // Redraw all parts in pure white to create flash effect
-    const parts = [this.body, this.head, this.leftArm, this.rightArm,
-      this.leftLeg, this.rightLeg, this.leftFoot, this.rightFoot,
-      this.accentDetail, this.weapon, this.accessoryBehind, this.accessoryFront];
-    for (const p of parts) {
-      p.tint = 0xffffff;
+    if (this.flashOverlay) {
+      this.container.removeChild(this.flashOverlay);
+      this.flashOverlay.destroy();
+      this.flashOverlay = null;
     }
-    // Bright container tint creates visible flash on dark-colored fighters
-    this.container.tint = 0xffffee;
 
-    // Restore after 80ms
+    // Create white overlay rect covering the full fighter silhouette
+    const r = this.getRigDimensions();
+    const overlay = new Graphics();
+    overlay.rect(-r.bw / 2, -(r.bh + r.totalLegsAndFeet + r.headR * 2), r.bw, r.bh + r.totalLegsAndFeet + r.headR * 2);
+    overlay.fill({ color: 0xffffff, alpha: 0.6 });
+    this.container.addChild(overlay);
+    this.flashOverlay = overlay;
+
+    // Remove after 80ms
     this.flashTimer = setTimeout(() => {
-      this.container.tint = 0xffffff;
+      if (this.flashOverlay) {
+        this.container.removeChild(this.flashOverlay);
+        this.flashOverlay.destroy();
+        this.flashOverlay = null;
+      }
       this.flashTimer = null;
     }, 80);
   }
@@ -1012,10 +1023,28 @@ export class Fighter {
     this.specialCooldown = 0;
     this.shieldActive = false;
     this.grounded = true;
+    this.cleanupTimers();
     this.setExpression(this.config.eye_expression);
     this.container.x = startX;
     this.container.y = startY;
     this.container.scale.x = facing;
-    this.container.tint = 0xffffff;
+    this.container.alpha = 1;
+  }
+
+  /** Clean up pending timers and flash overlay */
+  private cleanupTimers(): void {
+    if (this.flashTimer !== null) {
+      clearTimeout(this.flashTimer);
+      this.flashTimer = null;
+    }
+    if (this.expressionTimer !== null) {
+      clearTimeout(this.expressionTimer);
+      this.expressionTimer = null;
+    }
+    if (this.flashOverlay) {
+      this.container.removeChild(this.flashOverlay);
+      this.flashOverlay.destroy();
+      this.flashOverlay = null;
+    }
   }
 }

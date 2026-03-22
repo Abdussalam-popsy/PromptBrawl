@@ -4,12 +4,14 @@ import { type FighterConfig } from './ai/fighterConfig';
 import { generateFighter, getRandomAIPrompt } from './ai/generateFighter';
 import { SPECIAL_DEFS } from './ai/moveLibrary';
 import { GameLoop, type GameMode } from './game/GameLoop';
+import { commentary } from './game/CommentarySystem';
 import { ModeSelect } from './ui/ModeSelect';
 import { PromptInput } from './ui/PromptInput';
 import { ControlsTutorial } from './ui/ControlsTutorial';
 import { HUD } from './ui/HUD';
 import { PauseMenu } from './ui/PauseMenu';
 import { VictoryScreen } from './ui/VictoryScreen';
+import { FightCountdown } from './ui/FightCountdown';
 import { Lobby } from './ui/Lobby';
 import { MultiplayerSession, type ConnectionStatus } from './network/multiplayer';
 
@@ -35,6 +37,8 @@ export function App() {
   const [connectionError, setConnectionError] = useState('');
   const [waitingExpired, setWaitingExpired] = useState(false);
   const [isGeneratingOpponent, setIsGeneratingOpponent] = useState(false);
+  const [showCountdown, setShowCountdown] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(60);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
@@ -72,6 +76,8 @@ export function App() {
     setConnectionError('');
     aiGeneratingRef.current = false;
     setIsGeneratingOpponent(false);
+    setShowCountdown(false);
+    setTimeLeft(60);
     stopConfigResend();
     mpRef.current?.disconnect();
     mpRef.current = null;
@@ -226,6 +232,8 @@ export function App() {
   }, [screen]);
 
   const handleTutorialStart = useCallback(() => {
+    // Warm up AudioContext on user gesture (click/tap) before game starts
+    commentary.warmUp();
     setScreen('fighting');
   }, []);
 
@@ -315,31 +323,40 @@ export function App() {
         window.addEventListener('resize', resizeHandler);
 
         console.log('[initGame] Creating GameLoop');
-        const gameLoop = new GameLoop(app, p1Config, p2Config, mode, {
-          onHealthChange: (h1, h2) => { setP1Hp(h1); setP2Hp(h2); },
-          onSpecialCooldown: (cd1, cd2) => { setP1SpecialCd(cd1); setP2SpecialCd(cd2); },
-          onGameOver: (winnerConfig) => {
-            console.log('[GameOver] Winner:', winnerConfig.name);
+        const callbacks: import('./game/GameLoop').GameCallbacks = {
+          onHealthChange: (h1: number, h2: number) => { setP1Hp(h1); setP2Hp(h2); },
+          onSpecialCooldown: (cd1: number, cd2: number) => { setP1SpecialCd(cd1); setP2SpecialCd(cd2); },
+          onTimeUpdate: (sec: number) => { setTimeLeft(sec); },
+          onGameOver: (winnerConfig: FighterConfig) => {
             setWinner(winnerConfig);
             setScreen('victory');
-            try {
-              gameLoopRef.current?.destroy();
-            } catch (e) {
-              console.warn('GameLoop destroy error (non-fatal):', e);
-            }
-            gameLoopRef.current = null;
-            // Remove PixiJS canvas and destroy app to fully clear the GL overlay
-            if (appRef.current) {
-              try { appRef.current.destroy(true); } catch (_) { /* non-fatal */ }
-              appRef.current = null;
-            }
-            if (canvasRef.current) {
-              canvasRef.current.innerHTML = '';
-            }
+
+            // Fire real-time victory commentary, then tear down after audio starts
+            const victoryLine = winnerConfig.victory_line || `${winnerConfig.name} wins the fight!`;
+            commentary.playImmediate(victoryLine).catch(() => {});
+
+            // Delay canvas teardown so victory audio isn't cut off
+            setTimeout(() => {
+              try {
+                gameLoopRef.current?.destroy();
+              } catch (e) {
+                console.warn('GameLoop destroy error (non-fatal):', e);
+              }
+              gameLoopRef.current = null;
+              if (appRef.current) {
+                try { appRef.current.destroy(true); } catch (_) { /* non-fatal */ }
+                appRef.current = null;
+              }
+              if (canvasRef.current) {
+                canvasRef.current.innerHTML = '';
+              }
+            }, 1500);
           },
           onPeerDisconnected: () => { setPeerDisconnected(true); gameLoopRef.current?.pause(); },
-        }, mpRef.current ?? undefined, isHost);
+        };
+        const gameLoop = new GameLoop(app, p1Config, p2Config, mode, callbacks, mpRef.current ?? undefined, isHost);
         gameLoopRef.current = gameLoop;
+        setShowCountdown(true);
         console.log('[initGame] Game started successfully');
       } catch (err) {
         console.error('[initGame] Game init failed:', err);
@@ -397,8 +414,19 @@ export function App() {
       <div ref={canvasRef} style={{
         position: 'absolute',
         inset: 0,
+        zIndex: 1,
         display: screen === 'fighting' ? 'block' : 'none',
       }} />
+
+      {showCountdown && (
+        <FightCountdown
+          accentColor={p1Config?.color_palette.accent ?? '#ffffff'}
+          onComplete={() => {
+            setShowCountdown(false);
+            gameLoopRef.current?.startFight();
+          }}
+        />
+      )}
 
       {/* UI Overlays */}
       {screen === 'modeSelect' && (
@@ -549,6 +577,7 @@ export function App() {
             p2Hp={p2Hp}
             p1SpecialCd={p1SpecialCd}
             p2SpecialCd={p2SpecialCd}
+            timeLeft={timeLeft}
             p1Label={mode === 'vsOnline' ? 'P1 · HOST' : undefined}
             p2Label={mode === 'vsOnline' ? 'P2 · GUEST' : undefined}
           />

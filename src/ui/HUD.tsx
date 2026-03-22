@@ -7,6 +7,7 @@ interface HUDProps {
   p2Hp: number;
   p1SpecialCd: number;
   p2SpecialCd: number;
+  timeLeft?: number;
   p1Label?: string;
   p2Label?: string;
 }
@@ -191,7 +192,10 @@ function HealthBar({
   );
 }
 
-export function HUD({ p1Config, p2Config, p1Hp, p2Hp, p1SpecialCd, p2SpecialCd, p1Label, p2Label }: HUDProps) {
+export function HUD({ p1Config, p2Config, p1Hp, p2Hp, p1SpecialCd, p2SpecialCd, timeLeft = 60, p1Label, p2Label }: HUDProps) {
+  const critical = timeLeft <= 10;
+  const urgent = timeLeft <= 5;
+
   return (
     <div style={{
       position: 'absolute',
@@ -211,19 +215,34 @@ export function HUD({ p1Config, p2Config, p1Hp, p2Hp, p1SpecialCd, p2SpecialCd, 
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        marginTop: '14px',
+        marginTop: '4px',
+        minWidth: '56px',
       }}>
         <span style={{
           fontFamily: 'var(--font-display)',
-          color: 'rgba(255,255,255,0.12)',
-          fontSize: '16px',
-          fontWeight: 700,
-          letterSpacing: '0.15em',
+          color: critical ? '#ff2244' : 'rgba(255,255,255,0.85)',
+          fontSize: '32px',
+          fontWeight: 900,
+          letterSpacing: '0.05em',
+          textShadow: critical
+            ? '0 0 20px rgba(255, 34, 68, 0.6), 0 2px 4px rgba(0,0,0,0.8)'
+            : '0 2px 4px rgba(0,0,0,0.8)',
+          lineHeight: 1,
+          animation: urgent ? 'timer-pulse 0.5s ease-in-out infinite' : undefined,
         }}>
-          VS
+          {timeLeft}
         </span>
       </div>
       <HealthBar config={p2Config} hp={p2Hp} specialCd={p2SpecialCd} align="right" label={p2Label} />
+
+      {urgent && (
+        <style>{`
+          @keyframes timer-pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.15); opacity: 0.8; }
+          }
+        `}</style>
+      )}
     </div>
   );
 }

@@ -261,7 +261,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const elevenLabsKey = process.env.ELEVENLABS_API_KEY;
   if (elevenLabsKey && parsed.name) {
     try {
-      const voiceId = 'pNInz6obpgDQGcFmaJgB'; // Adam
+      const voiceId = '2EiwWnXFnvU5JabPnv8n'; // Clyde
       const lines: Record<string, string> = {
         intro: `${parsed.name} enters the arena!`,
         special: `${parsed.name} unleashes their special move!`,

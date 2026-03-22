@@ -15,6 +15,7 @@ export type GameMode = 'vsAI' | 'vsOnline';
 export interface GameCallbacks {
   onHealthChange: (p1Hp: number, p2Hp: number) => void;
   onSpecialCooldown: (p1Cd: number, p2Cd: number) => void;
+  onTimeUpdate?: (secondsLeft: number) => void;
   onGameOver: (winner: FighterConfig) => void;
   onPeerDisconnected?: () => void;
 }
@@ -35,10 +36,14 @@ export class GameLoop {
   private gameOver: boolean = false;
   private destroyed: boolean = false;
   private paused: boolean = false;
+  private countdownActive: boolean = true;
   private callbacks: GameCallbacks;
   private gameContainer: Container;
   private syncTimer: number = 0;
   private resizeHandler: (() => void) | null = null;
+  private readonly roundTime: number = 60;
+  private timeElapsed: number = 0;
+  private lastDisplayedSecond: number = 60;
 
   constructor(
     app: Application,
@@ -104,10 +109,6 @@ export class GameLoop {
     const p2Commentary = (p2Config as unknown as Record<string, unknown>).commentary as Record<string, string> | null | undefined;
     commentary.loadFromConfig(p1Config.name, p1Commentary).catch(() => {});
     commentary.loadFromConfig(p2Config.name, p2Commentary).catch(() => {});
-
-    // Play intro commentary after a short delay (gives audio time to load)
-    commentary.playDelayed(p1Config.name, 'intro', 500);
-    commentary.playDelayed(p2Config.name, 'intro', 2500);
 
     // Controls
     this.controls = new Controls();
@@ -200,8 +201,15 @@ export class GameLoop {
     this.controls.triggerButton(action);
   }
 
+  startFight(): void {
+    this.countdownActive = false;
+    // Play intro commentary AFTER countdown ends
+    commentary.playDelayed(this.p1.config.name, 'intro', 500);
+    commentary.playDelayed(this.p2.config.name, 'intro', 2500);
+  }
+
   private update = (): void => {
-    if (this.destroyed || this.gameOver || this.paused) return;
+    if (this.destroyed || this.gameOver || this.paused || this.countdownActive) return;
 
     const dt = this.app.ticker.deltaTime;
 
@@ -254,6 +262,24 @@ export class GameLoop {
       }
     }
 
+    // Round timer
+    this.timeElapsed += dt / 60;
+    const remaining = Math.max(0, Math.ceil(this.roundTime - this.timeElapsed));
+    if (remaining !== this.lastDisplayedSecond) {
+      this.lastDisplayedSecond = remaining;
+      this.callbacks.onTimeUpdate?.(remaining);
+    }
+
+    // Time's up — winner is whoever has more HP
+    if (remaining <= 0) {
+      this.gameOver = true;
+      this.app.ticker.stop();
+      const winner = this.p1.hp >= this.p2.hp ? this.p1 : this.p2;
+      commentary.playDelayed(winner.config.name, 'victory', 400);
+      this.callbacks.onGameOver(winner.config);
+      return;
+    }
+
     // Cooldown updates
     this.callbacks.onSpecialCooldown(this.p1.specialCooldown, this.p2.specialCooldown);
 
@@ -261,13 +287,11 @@ export class GameLoop {
     if (this.p1.state === 'dead') {
       this.gameOver = true;
       this.app.ticker.stop();
-      console.log('[GameLoop] P1 dead, P2 wins:', this.p2.config.name);
       commentary.playDelayed(this.p2.config.name, 'victory', 400);
       this.callbacks.onGameOver(this.p2.config);
     } else if (this.p2.state === 'dead') {
       this.gameOver = true;
       this.app.ticker.stop();
-      console.log('[GameLoop] P2 dead, P1 wins:', this.p1.config.name);
       commentary.playDelayed(this.p1.config.name, 'victory', 400);
       this.callbacks.onGameOver(this.p1.config);
     }
