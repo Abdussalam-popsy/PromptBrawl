@@ -115,6 +115,7 @@ export interface FighterConfig {
   background?: BackgroundConfig;
   silhouette?: SilhouetteConfig;
   dominant_accessory?: DominantAccessory | null;
+  sprite_url?: string | null;
 }
 
 export const LIGHT_ATTACKS: LightAttack[] = [

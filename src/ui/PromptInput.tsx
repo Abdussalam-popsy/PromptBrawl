@@ -260,7 +260,7 @@ export function PromptInput({ playerNumber, onFighterReady, onBack, isGenerating
                   borderRadius: '50%',
                   animation: 'spin 0.6s linear infinite',
                 }} />
-                SUMMONING FIGHTER...
+                CLAUDE IS IMAGINING YOUR FIGHTER...
               </span>
             ) : (
               'GENERATE FIGHTER'

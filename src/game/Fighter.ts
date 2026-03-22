@@ -1,4 +1,4 @@
-import { Container, Graphics } from 'pixi.js';
+import { Container, Graphics, Sprite, Assets } from 'pixi.js';
 import { gsap } from 'gsap';
 import { type FighterConfig, type EyeExpression, type SilhouetteConfig, type DominantAccessory } from '../ai/fighterConfig';
 import { getMoveDef, type MoveDefinition } from '../ai/moveLibrary';
@@ -162,6 +162,8 @@ export class Fighter {
   private expressionTimer: ReturnType<typeof setTimeout> | null = null;
   private currentExpression: EyeExpression;
   private screenScale: number = 1;
+  private spriteObj: Sprite | null = null;
+  private useSprite: boolean = false;
 
   constructor(config: FighterConfig, startX: number, startY: number, facing: 1 | -1, canvasWidth: number = 800, canvasHeight: number = 600) {
     this.config = config;
@@ -225,6 +227,55 @@ export class Fighter {
     this.container.addChild(this.rightEye);
 
     this.draw();
+
+    // Attempt to load AI-generated sprite as overlay (procedural rig stays as fallback)
+    if (config.sprite_url) {
+      this.loadSprite(config.sprite_url);
+    }
+  }
+
+  private loadSprite(url: string): void {
+    Assets.load<import('pixi.js').Texture>(url)
+      .then((texture) => {
+        const sprite = new Sprite(texture);
+        // Scale sprite to match rig height
+        const r = this.getRigDimensions();
+        const targetH = r.bh + r.totalLegsAndFeet + r.headR * 2;
+        const scale = targetH / texture.height;
+        sprite.scale.set(scale);
+        // Anchor at bottom center — sits on ground correctly
+        sprite.anchor.set(0.5, 1.0);
+        sprite.x = 0;
+        sprite.y = 0;
+
+        this.spriteObj = sprite;
+        this.useSprite = true;
+        this.container.addChild(sprite);
+
+        // Hide procedural rig parts (but keep them for hitbox calculations)
+        this.setRigVisible(false);
+      })
+      .catch((e) => {
+        console.warn('Sprite load failed, using rig:', e);
+      });
+  }
+
+  private setRigVisible(visible: boolean): void {
+    const alpha = visible ? 1 : 0;
+    this.head.alpha = alpha;
+    this.body.alpha = alpha;
+    this.leftArm.alpha = alpha;
+    this.rightArm.alpha = alpha;
+    this.leftLeg.alpha = alpha;
+    this.rightLeg.alpha = alpha;
+    this.leftFoot.alpha = alpha;
+    this.rightFoot.alpha = alpha;
+    this.weapon.alpha = alpha;
+    this.leftEye.alpha = alpha;
+    this.rightEye.alpha = alpha;
+    this.accentDetail.alpha = alpha;
+    this.accessoryBehind.alpha = alpha;
+    this.accessoryFront.alpha = alpha;
   }
 
   private hexToNum(hex: string): number {
@@ -870,6 +921,10 @@ export class Fighter {
         this.rightArm.y = bob * 0.5;
         this.weapon.y = bob;
       }
+      // Sprite idle bob
+      if (this.useSprite && this.spriteObj) {
+        this.spriteObj.y = bob;
+      }
     }
 
     // Attack animation (arm swing)
@@ -883,10 +938,24 @@ export class Fighter {
         this.rightArm.y = swing;
         this.weapon.y = swing;
       }
-    } else if (isSil) {
-      // Reset arm rotation when not attacking
-      this.rightArm.rotation = 0.21;
-      this.weapon.rotation = 0.21;
+      // Sprite squash on attack
+      if (this.useSprite && this.spriteObj) {
+        this.spriteObj.scale.x = this.spriteObj.scale.y * 1.15;
+        this.spriteObj.scale.y = this.spriteObj.scale.y * 0.9;
+      }
+    } else {
+      if (isSil) {
+        // Reset arm rotation when not attacking
+        this.rightArm.rotation = 0.21;
+        this.weapon.rotation = 0.21;
+      }
+      // Restore sprite scale when not attacking
+      if (this.useSprite && this.spriteObj) {
+        const r = this.getRigDimensions();
+        const targetH = r.bh + r.totalLegsAndFeet + r.headR * 2;
+        const baseScale = targetH / (this.spriteObj.texture?.height || 1);
+        this.spriteObj.scale.set(baseScale);
+      }
     }
   }
 
@@ -948,6 +1017,9 @@ export class Fighter {
       this.state = 'dead';
       // Death fade — no flash
       gsap.to(this.container, { alpha: 0, duration: 0.4 });
+      if (this.useSprite && this.spriteObj) {
+        gsap.to(this.spriteObj, { alpha: 0, duration: 0.4 });
+      }
     } else {
       // Hit flash — white tint then restore
       this.flashWhite();

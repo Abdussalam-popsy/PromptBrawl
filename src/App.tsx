@@ -180,7 +180,7 @@ export function App() {
       aiGeneratingRef.current = true;
       setIsGeneratingOpponent(true);
       const aiPrompt = getRandomAIPrompt();
-      const aiConfig = await generateFighter(aiPrompt);
+      const aiConfig = await generateFighter(aiPrompt, 2);
       setIsGeneratingOpponent(false);
       setPeerConfig(aiConfig);
       peerConfigRef.current = aiConfig;

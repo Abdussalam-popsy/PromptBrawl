@@ -2,12 +2,12 @@ import { type FighterConfig, validateFighterConfig, FALLBACK_FIGHTER } from './f
 
 const API_URL = '/api/generate-fighter';
 
-export async function generateFighter(prompt: string): Promise<FighterConfig> {
+export async function generateFighter(prompt: string, playerIndex: number = 1): Promise<FighterConfig> {
   try {
     const response = await fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({ prompt, playerIndex }),
     });
 
     if (!response.ok) {

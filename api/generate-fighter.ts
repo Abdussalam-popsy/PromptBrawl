@@ -178,8 +178,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   console.log(`[generate-fighter] API key loaded: ${apiKey.substring(0, 10)}...`);
 
   // Parse prompt
-  const body = req.body as { prompt?: string } | undefined;
+  const body = req.body as { prompt?: string; playerIndex?: number } | undefined;
   const prompt = body?.prompt;
+  const isP1 = (body?.playerIndex ?? 1) !== 2;
 
   if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
     console.error('[generate-fighter] Empty or missing prompt');
@@ -306,5 +307,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  return res.status(200).json({ ...parsed, commentary });
+  // Generate sprite image via fal.ai (non-blocking — never breaks fighter gen)
+  let sprite_url: string | null = null;
+  const falKey = process.env.FAL_API_KEY;
+  if (falKey && parsed.name) {
+    try {
+      const [spriteResult] = await Promise.allSettled([
+        fetch('https://fal.run/fal-ai/nano-banana-pro', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Key ${falKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            prompt: `${parsed.name} as a fighting game character, flat vector illustration, transparent background, full body, ${isP1 ? 'facing right' : 'facing left'}, bold colors, clean lines`,
+            num_images: 1,
+            aspect_ratio: '1:1',
+            output_format: 'png',
+            resolution: '1K',
+            limit_generations: true,
+          }),
+        }).then(async (r) => {
+          if (!r.ok) throw new Error(`fal.ai ${r.status}`);
+          return r.json();
+        }),
+      ]);
+      if (spriteResult.status === 'fulfilled') {
+        const images = spriteResult.value?.images;
+        sprite_url = images?.[0]?.url ?? null;
+        if (sprite_url) console.log(`[generate-fighter] Sprite generated: ${sprite_url.substring(0, 80)}...`);
+      }
+    } catch (falErr) {
+      console.warn('[generate-fighter] Sprite generation failed (non-fatal):', falErr);
+    }
+  }
+
+  return res.status(200).json({ ...parsed, commentary, sprite_url });
 }
