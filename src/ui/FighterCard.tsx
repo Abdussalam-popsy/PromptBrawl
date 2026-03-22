@@ -79,8 +79,6 @@ export function FighterCard({ config, onFight, loading = false }: FighterCardPro
   const accent = config.color_palette.accent;
   const secondary = config.color_palette.secondary;
 
-  console.log('[FighterCard] sprite_url:', config.sprite_url);
-
   return (
     <div
       ref={cardRef}
@@ -88,11 +86,11 @@ export function FighterCard({ config, onFight, loading = false }: FighterCardPro
         background: 'rgba(8, 8, 20, 0.95)',
         border: `1px solid ${primary}30`,
         borderRadius: '6px',
-        padding: config.sprite_url ? '32px 180px 32px 36px' : '32px 36px',
-        maxWidth: config.sprite_url ? '560px' : '440px',
+        padding: '32px 36px',
+        maxWidth: '520px',
         width: '100%',
         position: 'relative',
-        overflow: 'visible',
+        overflow: 'hidden',
         animation: 'scale-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both',
         backdropFilter: 'blur(10px)',
       }}
@@ -140,62 +138,119 @@ export function FighterCard({ config, onFight, loading = false }: FighterCardPro
         pointerEvents: 'none',
       }} />
 
-      <h2 style={{
-        fontFamily: 'var(--font-display)',
-        fontSize: '30px',
-        fontWeight: 900,
-        color: primary,
-        margin: '0 0 4px 0',
-        textTransform: 'uppercase',
-        letterSpacing: '0.08em',
-        textShadow: `0 0 30px ${primary}55, 0 2px 4px rgba(0,0,0,0.5)`,
+      {/* Header: name/description left, sprite box right */}
+      <div style={{
+        display: 'flex',
+        gap: '20px',
+        alignItems: 'flex-start',
+        marginBottom: '18px',
         position: 'relative',
       }}>
-        {config.name}
-      </h2>
+        {/* Left side — name + personality + tags */}
+        <div style={{ flex: '0 0 60%', minWidth: 0 }}>
+          <h2 style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: '28px',
+            fontWeight: 900,
+            color: primary,
+            margin: '0 0 4px 0',
+            textTransform: 'uppercase',
+            letterSpacing: '0.08em',
+            textShadow: `0 0 30px ${primary}55, 0 2px 4px rgba(0,0,0,0.5)`,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}>
+            {config.name}
+          </h2>
 
-      <p style={{
-        fontFamily: 'var(--font-body)',
-        color: 'rgba(255,255,255,0.35)',
-        fontSize: '15px',
-        fontStyle: 'italic',
-        fontWeight: 500,
-        margin: '0 0 18px 0',
-        lineHeight: 1.4,
-      }}>
-        {config.personality}
-      </p>
+          <p style={{
+            fontFamily: 'var(--font-body)',
+            color: 'rgba(255,255,255,0.35)',
+            fontSize: '14px',
+            fontStyle: 'italic',
+            fontWeight: 500,
+            margin: '0 0 12px 0',
+            lineHeight: 1.4,
+          }}>
+            {config.personality}
+          </p>
 
-      {/* Tags */}
-      <div style={{ display: 'flex', gap: '6px', marginBottom: '20px', flexWrap: 'wrap' }}>
-        <span style={{
-          fontFamily: 'var(--font-mono)',
-          padding: '4px 12px',
-          background: `${secondary}12`,
-          color: secondary,
-          borderRadius: '2px',
-          fontSize: '10px',
-          textTransform: 'uppercase',
-          fontWeight: 700,
-          letterSpacing: '0.1em',
-          border: `1px solid ${secondary}20`,
+          {/* Tags */}
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            <span style={{
+              fontFamily: 'var(--font-mono)',
+              padding: '4px 12px',
+              background: `${secondary}12`,
+              color: secondary,
+              borderRadius: '2px',
+              fontSize: '10px',
+              textTransform: 'uppercase',
+              fontWeight: 700,
+              letterSpacing: '0.1em',
+              border: `1px solid ${secondary}20`,
+            }}>
+              {config.size_variant}
+            </span>
+            <span style={{
+              fontFamily: 'var(--font-mono)',
+              padding: '4px 12px',
+              background: `${accent}12`,
+              color: accent,
+              borderRadius: '2px',
+              fontSize: '10px',
+              textTransform: 'uppercase',
+              fontWeight: 700,
+              letterSpacing: '0.1em',
+              border: `1px solid ${accent}20`,
+            }}>
+              {config.eye_expression}
+            </span>
+          </div>
+        </div>
+
+        {/* Right side — sprite image box */}
+        <div style={{
+          flex: '0 0 35%',
+          aspectRatio: '1 / 1',
+          borderRadius: '8px',
+          overflow: 'hidden',
+          border: `1px solid ${primary}44`,
+          background: `${primary}11`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
         }}>
-          {config.size_variant}
-        </span>
-        <span style={{
-          fontFamily: 'var(--font-mono)',
-          padding: '4px 12px',
-          background: `${accent}12`,
-          color: accent,
-          borderRadius: '2px',
-          fontSize: '10px',
-          textTransform: 'uppercase',
-          fontWeight: 700,
-          letterSpacing: '0.1em',
-          border: `1px solid ${accent}20`,
-        }}>
-          {config.eye_expression}
-        </span>
+          {config.sprite_url ? (
+            <img
+              src={config.sprite_url}
+              alt={config.name}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                objectPosition: 'center top',
+                animation: 'spriteFadeIn 0.4s ease-out both',
+              }}
+            />
+          ) : (
+            <div style={{
+              width: '100%',
+              height: '100%',
+              background: `${primary}33`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
+              <span style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: '28px',
+                color: `${primary}55`,
+                fontWeight: 900,
+              }}>?</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Separator */}
@@ -272,29 +327,10 @@ export function FighterCard({ config, onFight, loading = false }: FighterCardPro
         )}
       </button>
 
-      {config.sprite_url && (
-        <img
-          src={config.sprite_url}
-          alt={config.name}
-          style={{
-            position: 'absolute',
-            right: '-40px',
-            bottom: '0',
-            height: '120%',
-            width: 'auto',
-            objectFit: 'contain',
-            filter: `drop-shadow(0 0 24px ${primary})`,
-            animation: 'spriteSlideIn 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards',
-            pointerEvents: 'none',
-            zIndex: 10,
-          }}
-        />
-      )}
-
       <style>{`
-        @keyframes spriteSlideIn {
-          from { transform: translateX(80px) scale(0.8); opacity: 0; }
-          to   { transform: translateX(0) scale(1); opacity: 1; }
+        @keyframes spriteFadeIn {
+          from { opacity: 0; transform: scale(0.9); }
+          to   { opacity: 1; transform: scale(1); }
         }
       `}</style>
     </div>

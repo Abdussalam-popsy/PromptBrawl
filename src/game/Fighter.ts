@@ -164,6 +164,7 @@ export class Fighter {
   private screenScale: number = 1;
   private spriteObj: Sprite | null = null;
   private useSprite: boolean = false;
+  private baseSpriteScale: number = 1;
   private rigGraphics: Graphics[] = [];
 
   constructor(config: FighterConfig, startX: number, startY: number, facing: 1 | -1, canvasWidth: number = 800, canvasHeight: number = 600) {
@@ -259,6 +260,7 @@ export class Fighter {
         sprite.y = 0;
 
         this.spriteObj = sprite;
+        this.baseSpriteScale = scale;
         this.useSprite = true;
         this.container.addChild(sprite);
 
@@ -272,6 +274,7 @@ export class Fighter {
 
   private setRigVisible(visible: boolean): void {
     const alpha = visible ? 1 : 0;
+    this.shadow.alpha = alpha;
     this.head.alpha = alpha;
     this.body.alpha = alpha;
     this.leftArm.alpha = alpha;
@@ -948,10 +951,10 @@ export class Fighter {
         this.rightArm.y = swing;
         this.weapon.y = swing;
       }
-      // Sprite squash on attack
+      // Sprite squash on attack — use stored base scale, never compound
       if (this.useSprite && this.spriteObj) {
-        this.spriteObj.scale.x = this.spriteObj.scale.y * 1.15;
-        this.spriteObj.scale.y = this.spriteObj.scale.y * 0.9;
+        this.spriteObj.scale.x = this.baseSpriteScale * 1.15;
+        this.spriteObj.scale.y = this.baseSpriteScale * 0.88;
       }
     } else {
       if (isSil) {
@@ -961,10 +964,7 @@ export class Fighter {
       }
       // Restore sprite scale when not attacking
       if (this.useSprite && this.spriteObj) {
-        const r = this.getRigDimensions();
-        const targetH = r.bh + r.totalLegsAndFeet + r.headR * 2;
-        const baseScale = targetH / (this.spriteObj.texture?.height || 1);
-        this.spriteObj.scale.set(baseScale);
+        this.spriteObj.scale.set(this.baseSpriteScale);
       }
     }
   }

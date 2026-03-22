@@ -164,6 +164,120 @@ function validate(data: FighterJSON): string | null {
   return null;
 }
 
+/** Generate all 4 commentary clips via ElevenLabs TTS. Returns null if unavailable. */
+async function generateCommentary(
+  parsed: FighterJSON,
+  apiKey: string | undefined,
+): Promise<Record<string, string> | null> {
+  if (!apiKey || !parsed.name) return null;
+  try {
+    const voiceId = '2EiwWnXFnvU5JabPnv8n'; // Clyde
+    const lines: Record<string, string> = {
+      intro: `${parsed.name} enters the arena!`,
+      special: `${parsed.name} unleashes their special move!`,
+      low_health: `${parsed.name} is on the ropes! One more hit could end it!`,
+      victory: `${parsed.victory_line || parsed.name + ' wins!'}`,
+    };
+
+    const ttsResults = await Promise.allSettled(
+      Object.entries(lines).map(async ([key, text]) => {
+        const ttsRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+          method: 'POST',
+          headers: {
+            'xi-api-key': apiKey,
+            'Content-Type': 'application/json',
+            'Accept': 'audio/mpeg',
+          },
+          body: JSON.stringify({
+            text,
+            model_id: 'eleven_monolingual_v1',
+            voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+          }),
+        });
+        if (!ttsRes.ok) throw new Error(`TTS ${key}: ${ttsRes.status}`);
+        const arrayBuf = await ttsRes.arrayBuffer();
+        const base64 = Buffer.from(arrayBuf).toString('base64');
+        return { key, base64 };
+      }),
+    );
+
+    const commentary: Record<string, string> = {};
+    for (const result of ttsResults) {
+      if (result.status === 'fulfilled') {
+        commentary[result.value.key] = result.value.base64;
+      }
+    }
+    if (Object.keys(commentary).length === 0) return null;
+    console.log(`[generate-fighter] Commentary generated: ${Object.keys(commentary).join(', ')}`);
+    return commentary;
+  } catch (ttsErr) {
+    console.warn('[generate-fighter] Commentary generation failed (non-fatal):', ttsErr);
+    return null;
+  }
+}
+
+/** Generate sprite via fal.ai nano-banana-pro, then remove background via birefnet. */
+async function generateSprite(
+  name: string,
+  isP1: boolean,
+  apiKey: string | undefined,
+): Promise<string | null> {
+  if (!apiKey || !name) return null;
+  try {
+    const falRes = await fetch('https://fal.run/fal-ai/nano-banana-pro', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Key ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        prompt: `${name} as a fighting game character, flat vector illustration, transparent background, full body, ${isP1 ? 'facing right' : 'facing left'}, bold colors, clean lines`,
+        num_images: 1,
+        aspect_ratio: '1:1',
+        output_format: 'png',
+        resolution: '1K',
+        limit_generations: true,
+      }),
+    });
+    if (!falRes.ok) throw new Error(`fal.ai ${falRes.status}`);
+    const falData = await falRes.json();
+    let sprite_url: string | null = falData?.images?.[0]?.url ?? null;
+    if (!sprite_url) return null;
+
+    console.log(`[generate-fighter] Sprite generated: ${sprite_url.substring(0, 80)}...`);
+
+    // Remove background via birefnet
+    try {
+      const bgRes = await fetch('https://fal.run/fal-ai/birefnet', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Key ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          image_url: sprite_url,
+          model: 'General Use (Light)',
+        }),
+      });
+      if (bgRes.ok) {
+        const bgData = await bgRes.json();
+        const cleanUrl = bgData?.image?.url ?? null;
+        if (cleanUrl) {
+          console.log(`[generate-fighter] BG removed: ${cleanUrl.substring(0, 80)}...`);
+          sprite_url = cleanUrl;
+        }
+      }
+    } catch (bgErr) {
+      console.warn('[generate-fighter] BG removal failed (non-fatal):', bgErr);
+    }
+
+    return sprite_url;
+  } catch (falErr) {
+    console.warn('[generate-fighter] Sprite generation failed (non-fatal):', falErr);
+    return null;
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -257,116 +371,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   console.log(`[generate-fighter] Success: generated "${parsed.name}"`);
 
-  // Generate commentary audio via ElevenLabs TTS (non-blocking — never breaks fighter gen)
-  let commentary: Record<string, string> | null = null;
+  // Run TTS and sprite generation in PARALLEL — total wait = max(TTS, sprite) instead of sum
   const elevenLabsKey = process.env.ELEVENLABS_API_KEY;
-  if (elevenLabsKey && parsed.name) {
-    try {
-      const voiceId = '2EiwWnXFnvU5JabPnv8n'; // Clyde
-      const lines: Record<string, string> = {
-        intro: `${parsed.name} enters the arena!`,
-        special: `${parsed.name} unleashes their special move!`,
-        low_health: `${parsed.name} is on the ropes! One more hit could end it!`,
-        victory: `${parsed.victory_line || parsed.name + ' wins!'}`,
-      };
-
-      const ttsResults = await Promise.allSettled(
-        Object.entries(lines).map(async ([key, text]) => {
-          const ttsRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
-            method: 'POST',
-            headers: {
-              'xi-api-key': elevenLabsKey,
-              'Content-Type': 'application/json',
-              'Accept': 'audio/mpeg',
-            },
-            body: JSON.stringify({
-              text,
-              model_id: 'eleven_monolingual_v1',
-              voice_settings: { stability: 0.5, similarity_boost: 0.75 },
-            }),
-          });
-          if (!ttsRes.ok) throw new Error(`TTS ${key}: ${ttsRes.status}`);
-          const arrayBuf = await ttsRes.arrayBuffer();
-          const base64 = Buffer.from(arrayBuf).toString('base64');
-          return { key, base64 };
-        })
-      );
-
-      commentary = {};
-      for (const result of ttsResults) {
-        if (result.status === 'fulfilled') {
-          commentary[result.value.key] = result.value.base64;
-        }
-      }
-      // If no clips succeeded, null out
-      if (Object.keys(commentary).length === 0) commentary = null;
-      else console.log(`[generate-fighter] Commentary generated: ${Object.keys(commentary).join(', ')}`);
-    } catch (ttsErr) {
-      console.warn(`[generate-fighter] Commentary generation failed (non-fatal):`, ttsErr);
-      commentary = null;
-    }
-  }
-
-  // Generate sprite image via fal.ai (non-blocking — never breaks fighter gen)
-  let sprite_url: string | null = null;
   const falKey = process.env.FAL_API_KEY;
-  if (falKey && parsed.name) {
-    try {
-      const [spriteResult] = await Promise.allSettled([
-        fetch('https://fal.run/fal-ai/nano-banana-pro', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Key ${falKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            prompt: `${parsed.name} as a fighting game character, flat vector illustration, transparent background, full body, ${isP1 ? 'facing right' : 'facing left'}, bold colors, clean lines`,
-            num_images: 1,
-            aspect_ratio: '1:1',
-            output_format: 'png',
-            resolution: '1K',
-            limit_generations: true,
-          }),
-        }).then(async (r) => {
-          if (!r.ok) throw new Error(`fal.ai ${r.status}`);
-          return r.json();
-        }),
-      ]);
-      if (spriteResult.status === 'fulfilled') {
-        const images = spriteResult.value?.images;
-        sprite_url = images?.[0]?.url ?? null;
-        if (sprite_url) {
-          console.log(`[generate-fighter] Sprite generated: ${sprite_url.substring(0, 80)}...`);
-          // Remove background via birefnet
-          try {
-            const bgRemovalResponse = await fetch('https://fal.run/fal-ai/birefnet', {
-              method: 'POST',
-              headers: {
-                'Authorization': `Key ${falKey}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                image_url: sprite_url,
-                model: 'General Use (Light)',
-              }),
-            });
-            if (bgRemovalResponse.ok) {
-              const bgData = await bgRemovalResponse.json();
-              const cleanUrl = bgData?.image?.url ?? null;
-              if (cleanUrl) {
-                console.log(`[generate-fighter] BG removed: ${cleanUrl.substring(0, 80)}...`);
-                sprite_url = cleanUrl;
-              }
-            }
-          } catch (bgErr) {
-            console.warn('[generate-fighter] BG removal failed (non-fatal):', bgErr);
-          }
-        }
-      }
-    } catch (falErr) {
-      console.warn('[generate-fighter] Sprite generation failed (non-fatal):', falErr);
-    }
-  }
+
+  const [ttsResult, spriteResult] = await Promise.allSettled([
+    // ElevenLabs: all 4 commentary clips in parallel
+    generateCommentary(parsed, elevenLabsKey),
+    // fal.ai sprite + birefnet BG removal (chained, since BG removal depends on sprite)
+    generateSprite(parsed.name, isP1, falKey),
+  ]);
+
+  const commentary = ttsResult.status === 'fulfilled' ? ttsResult.value : null;
+  const sprite_url = spriteResult.status === 'fulfilled' ? spriteResult.value : null;
 
   return res.status(200).json({ ...parsed, commentary, sprite_url });
 }

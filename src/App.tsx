@@ -344,7 +344,7 @@ export function App() {
             const victoryLine = winnerConfig.victory_line || `${winnerConfig.name} wins the fight!`;
             commentary.playImmediate(victoryLine).catch(() => {});
 
-            // Delay canvas teardown so victory audio isn't cut off
+            // Delay canvas teardown so victory audio has time to play
             setTimeout(() => {
               try {
                 gameLoopRef.current?.destroy();
@@ -359,7 +359,7 @@ export function App() {
               if (canvasRef.current) {
                 canvasRef.current.innerHTML = '';
               }
-            }, 1500);
+            }, 3500);
           },
           onPeerDisconnected: () => { setPeerDisconnected(true); gameLoopRef.current?.pause(); },
         };
