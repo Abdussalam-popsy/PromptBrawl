@@ -335,7 +335,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (spriteResult.status === 'fulfilled') {
         const images = spriteResult.value?.images;
         sprite_url = images?.[0]?.url ?? null;
-        if (sprite_url) console.log(`[generate-fighter] Sprite generated: ${sprite_url.substring(0, 80)}...`);
+        if (sprite_url) {
+          console.log(`[generate-fighter] Sprite generated: ${sprite_url.substring(0, 80)}...`);
+          // Remove background via birefnet
+          try {
+            const bgRemovalResponse = await fetch('https://fal.run/fal-ai/birefnet', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Key ${falKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                image_url: sprite_url,
+                model: 'General Use (Light)',
+              }),
+            });
+            if (bgRemovalResponse.ok) {
+              const bgData = await bgRemovalResponse.json();
+              const cleanUrl = bgData?.image?.url ?? null;
+              if (cleanUrl) {
+                console.log(`[generate-fighter] BG removed: ${cleanUrl.substring(0, 80)}...`);
+                sprite_url = cleanUrl;
+              }
+            }
+          } catch (bgErr) {
+            console.warn('[generate-fighter] BG removal failed (non-fatal):', bgErr);
+          }
+        }
       }
     } catch (falErr) {
       console.warn('[generate-fighter] Sprite generation failed (non-fatal):', falErr);
