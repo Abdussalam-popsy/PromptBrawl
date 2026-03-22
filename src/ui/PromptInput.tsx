@@ -37,18 +37,51 @@ export function PromptInput({ playerNumber, onFighterReady, onBack, isGenerating
   const handleGenerate = useCallback(async () => {
     if (!prompt.trim() || loading) return;
     setLoading(true);
-    setLoadingMsg('Claude is imagining your fighter...');
+
+    // Rotate loading messages while both AIs work
+    const messages = [
+      'Claude is imagining your fighter...',
+      'Studying the lore...',
+      'fal.ai is drawing the sprite...',
+      'Calculating fight style...',
+    ];
+    let msgIdx = 0;
+    setLoadingMsg(messages[0]);
+    const msgInterval = setInterval(() => {
+      msgIdx = (msgIdx + 1) % messages.length;
+      setLoadingMsg(messages[msgIdx]);
+    }, 2500);
+
     const config = await generateFighter(prompt.trim());
 
-    // Preload sprite image so it's cached before card/game renders
+    // Show name-specific messages during sprite preload
     if (config.sprite_url) {
-      setLoadingMsg(`${config.name} is materializing...`);
-      await new Promise<void>((resolve) => {
+      clearInterval(msgInterval);
+      setLoadingMsg(`${config.name} is suiting up...`);
+
+      const preloadDone = new Promise<void>((resolve) => {
         const img = new Image();
         img.onload = () => resolve();
-        img.onerror = () => resolve(); // don't block on error
+        img.onerror = () => resolve();
         img.src = config.sprite_url!;
       });
+
+      // Rotate name-specific messages while sprite loads
+      const nameMessages = [
+        `${config.name} is suiting up...`,
+        `${config.name} looks dangerous...`,
+        'Almost ready...',
+      ];
+      let nameIdx = 0;
+      const nameInterval = setInterval(() => {
+        nameIdx = (nameIdx + 1) % nameMessages.length;
+        setLoadingMsg(nameMessages[nameIdx]);
+      }, 2000);
+
+      await preloadDone;
+      clearInterval(nameInterval);
+    } else {
+      clearInterval(msgInterval);
     }
 
     setFighter(config);

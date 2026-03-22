@@ -79,6 +79,8 @@ export function FighterCard({ config, onFight, loading = false }: FighterCardPro
   const accent = config.color_palette.accent;
   const secondary = config.color_palette.secondary;
 
+  console.log('[FighterCard] sprite_url:', config.sprite_url);
+
   return (
     <div
       ref={cardRef}
@@ -86,11 +88,11 @@ export function FighterCard({ config, onFight, loading = false }: FighterCardPro
         background: 'rgba(8, 8, 20, 0.95)',
         border: `1px solid ${primary}30`,
         borderRadius: '6px',
-        padding: '32px 36px',
-        maxWidth: '440px',
+        padding: config.sprite_url ? '32px 180px 32px 36px' : '32px 36px',
+        maxWidth: config.sprite_url ? '560px' : '440px',
         width: '100%',
         position: 'relative',
-        overflow: 'hidden',
+        overflow: 'visible',
         animation: 'scale-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both',
         backdropFilter: 'blur(10px)',
       }}
@@ -269,6 +271,32 @@ export function FighterCard({ config, onFight, loading = false }: FighterCardPro
           'FIGHT'
         )}
       </button>
+
+      {config.sprite_url && (
+        <img
+          src={config.sprite_url}
+          alt={config.name}
+          style={{
+            position: 'absolute',
+            right: '-40px',
+            bottom: '0',
+            height: '120%',
+            width: 'auto',
+            objectFit: 'contain',
+            filter: `drop-shadow(0 0 24px ${primary})`,
+            animation: 'spriteSlideIn 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards',
+            pointerEvents: 'none',
+            zIndex: 10,
+          }}
+        />
+      )}
+
+      <style>{`
+        @keyframes spriteSlideIn {
+          from { transform: translateX(80px) scale(0.8); opacity: 0; }
+          to   { transform: translateX(0) scale(1); opacity: 1; }
+        }
+      `}</style>
     </div>
   );
 }
