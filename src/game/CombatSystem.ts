@@ -136,25 +136,12 @@ export class CombatSystem {
     const isHeavy = moveDef.type === 'heavy' || moveDef.type === 'special';
     this.onHit?.(attacker, defender, rawDamage, isHeavy);
 
-    // Hit flash — briefly tint white then restore
-    defender.container.tint = 0xffffff;
-    gsap.delayedCall(0.1, () => {
-      if (defender.container) {
-        defender.container.tint = 0xff4444;
-        gsap.delayedCall(0.1, () => {
-          if (defender.container) defender.container.tint = 0xffffff;
-        });
-      }
-    });
-
     // Impact particles
     const hitColor = parseInt(attacker.config.color_palette.accent.replace('#', ''), 16);
     this.spawnParticles(defender.x, defender.y - 30, hitColor, isHeavy ? 10 : 6);
 
-    // Screen shake on heavy
-    if (isHeavy) {
-      this.screenShake();
-    }
+    // Screen shake on every hit — intensity varies by type
+    this.screenShake(moveDef.type);
   }
 
   private spawnProjectile(attacker: Fighter, _defender: Fighter, moveDef: MoveDefinition): void {
@@ -206,19 +193,36 @@ export class CombatSystem {
     }
   }
 
-  private screenShake(): void {
-    const orig = { x: this.stageContainer.x, y: this.stageContainer.y };
-    gsap.to(this.stageContainer, {
-      x: orig.x + 8,
-      y: orig.y + 4,
-      duration: 0.03,
-      yoyo: true,
-      repeat: 5,
-      onComplete: () => {
-        this.stageContainer.x = orig.x;
-        this.stageContainer.y = orig.y;
-      },
-    });
+  private screenShake(type: 'light' | 'heavy' | 'special'): void {
+    gsap.killTweensOf(this.stageContainer);
+    this.stageContainer.x = 0;
+    this.stageContainer.y = 0;
+
+    if (type === 'special') {
+      gsap.to(this.stageContainer, {
+        x: 12, y: 4,
+        duration: 0.15 / (5 * 2),
+        yoyo: true, repeat: 5 * 2 - 1,
+        ease: 'none',
+        onComplete: () => { this.stageContainer.x = 0; this.stageContainer.y = 0; },
+      });
+    } else if (type === 'heavy') {
+      gsap.to(this.stageContainer, {
+        x: 8,
+        duration: 0.12 / (4 * 2),
+        yoyo: true, repeat: 4 * 2 - 1,
+        ease: 'none',
+        onComplete: () => { this.stageContainer.x = 0; this.stageContainer.y = 0; },
+      });
+    } else {
+      gsap.to(this.stageContainer, {
+        x: 4,
+        duration: 0.08 / (3 * 2),
+        yoyo: true, repeat: 3 * 2 - 1,
+        ease: 'none',
+        onComplete: () => { this.stageContainer.x = 0; this.stageContainer.y = 0; },
+      });
+    }
   }
 
   updateProjectiles(dt: number, fighters: Fighter[], arenaWidth: number): void {
@@ -248,7 +252,7 @@ export class CombatSystem {
 
           const hitColor = parseInt(proj.owner.config.color_palette.accent.replace('#', ''), 16);
           this.spawnParticles(fighter.x, fighter.y - 30, hitColor, 8);
-          this.screenShake();
+          this.screenShake('special');
 
           proj.active = false;
           this.projectileContainer.removeChild(proj.graphic);

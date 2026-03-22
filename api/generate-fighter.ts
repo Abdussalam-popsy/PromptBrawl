@@ -38,6 +38,41 @@ SILHOUETTE: Choose a body_shape and proportions that match the character's build
 - color_primary: main body fill hex. color_outline: outline/glow hex.
 - scale: 0.8-1.4 for small vs large characters.
 
+ACCESSORY SELECTION — This is the most important visual decision.
+Pick exactly ONE dominant_accessory that makes this character instantly recognisable. Think: what is the single most iconic visual detail a child would draw first?
+
+RULES:
+- Always pick the most iconic feature, never generic ones
+- If the character has a famous face covering → mask or visor
+- If the character has a famous hat → wizard_hat
+- If the character has wings or a cape as their PRIMARY trait → wings or cape_large
+- If nothing else fits → pick the closest available option
+
+EXAMPLES — use these as your guide:
+- SpongeBob → mask (square face patch effect)
+- Mr. Krabs → giant_weapon (claw)
+- Ninja / Snake Eyes / Scorpion → mask
+- Batman → shoulder_plates (armor, no cape — cape is not readable)
+- Wizard / Gandalf / Dumbledore → wizard_hat
+- Superman / superhero → aura (energy presence)
+- Angel → wings
+- Demon / Devil → horns
+- Darth Vader → mask + black (use mask)
+- Samurai → giant_weapon
+- Pirate → giant_weapon (sword)
+- Robot / Cyborg → visor
+- Ghost / Spirit → aura
+- King / Queen / Crown character → wizard_hat (closest to crown)
+- Athlete / Boxer → shoulder_plates
+- Animal character with ears → horns (closest to ears)
+- Invisible Man / Mystery character → visor
+
+AVAILABLE OPTIONS (pick only from this list):
+wizard_hat, horns, antenna, halo, shoulder_plates, scarf_trail, giant_weapon, visor, mask, wings, cape_large, spikes_back, aura
+
+IMPORTANT: Never leave dominant_accessory null unless the prompt is literally a plain human with no iconic feature.
+Always assign something. Iconic > accurate > generic.
+
 Output schema:
 {
   "name": string,
@@ -49,7 +84,8 @@ Output schema:
   "move_loadout": { "light_attack": string, "heavy_attack": string, "special": string, "projectile_sprite": string },
   "eye_expression": "neutral" | "angry" | "greedy" | "scared" | "unhinged",
   "background": { "name": string, "sky_color": string, "ground_color": string, "mid_color": string, "elements": string[], "atmosphere": string },
-  "silhouette": { "body_shape": "square"|"rectangle_tall"|"rectangle_wide"|"circle"|"triangle", "body_width": number, "body_height": number, "head_shape": "circle"|"square"|"triangle"|"none", "head_size": number, "limb_style": "normal"|"stubby"|"long"|"none", "color_primary": string, "color_outline": string, "scale": number }
+  "silhouette": { "body_shape": "square"|"rectangle_tall"|"rectangle_wide"|"circle"|"triangle", "body_width": number, "body_height": number, "head_shape": "circle"|"square"|"triangle"|"none", "head_size": number, "limb_style": "normal"|"stubby"|"long"|"none", "color_primary": string, "color_outline": string, "scale": number },
+  "dominant_accessory": "wizard_hat"|"horns"|"wings"|"cape_large"|"shoulder_plates"|"antenna"|"scarf_trail"|"giant_weapon"|"halo"|"spikes_back"|"visor"|"mask"|"aura"|null
 }`;
 
 const LIGHT_ATTACKS = ['punch', 'kick', 'claw_swipe', 'tail_whip', 'headbutt'];
@@ -68,6 +104,7 @@ const FALLBACK = {
   eye_expression: 'neutral',
   background: { name: 'Default Arena', sky_color: '#0a0a1e', ground_color: '#1a1a2e', mid_color: '#151530', elements: ['distant buildings', 'dim streetlights'], atmosphere: 'urban night' },
   silhouette: { body_shape: 'square', body_width: 60, body_height: 60, head_shape: 'circle', head_size: 30, limb_style: 'normal', color_primary: '#666666', color_outline: '#999999', scale: 1.0 },
+  dominant_accessory: null,
 };
 
 interface FighterJSON {
@@ -81,25 +118,48 @@ interface FighterJSON {
   eye_expression: string;
   background?: { name: string; sky_color: string; ground_color: string; mid_color: string; elements: string[]; atmosphere: string };
   silhouette?: { body_shape: string; body_width: number; body_height: number; head_shape: string; head_size: number; limb_style: string; color_primary: string; color_outline: string; scale: number };
+  dominant_accessory?: string | null;
 }
 
+/** Clamp and fix — never reject. Returns null (success) always. */
 function validate(data: FighterJSON): string | null {
-  if (!data.name) return 'missing name';
-  if (!data.personality) return 'missing personality';
-  if (!data.victory_line) return 'missing victory_line';
-  if (!['light', 'medium', 'heavy'].includes(data.size_variant)) return `invalid size_variant: ${data.size_variant}`;
-  if (!['neutral', 'angry', 'greedy', 'scared', 'unhinged'].includes(data.eye_expression)) return `invalid eye_expression: ${data.eye_expression}`;
+  if (!data.name) data.name = 'Unknown Fighter';
+  if (!data.personality) data.personality = 'Mysterious';
+  if (!data.victory_line) data.victory_line = 'I win!';
+  if (!['light', 'medium', 'heavy'].includes(data.size_variant)) data.size_variant = 'medium';
+  if (!['neutral', 'angry', 'greedy', 'scared', 'unhinged'].includes(data.eye_expression)) data.eye_expression = 'neutral';
 
-  if (!data.stats) return 'missing stats';
-  const { speed, damage, defense, chaos } = data.stats;
-  if ([speed, damage, defense, chaos].some(v => typeof v !== 'number' || v < 1 || v > 10)) return `stats out of range: ${JSON.stringify(data.stats)}`;
-  if (speed + damage + defense + chaos !== 24) return `stats sum to ${speed + damage + defense + chaos}, expected 24`;
+  if (!data.stats) {
+    data.stats = { speed: 6, damage: 6, defense: 6, chaos: 6 };
+  } else {
+    const s = data.stats;
+    if (typeof s.speed !== 'number') s.speed = 6;
+    if (typeof s.damage !== 'number') s.damage = 6;
+    if (typeof s.defense !== 'number') s.defense = 6;
+    if (typeof s.chaos !== 'number') s.chaos = 6;
+    s.speed = Math.min(10, Math.max(1, Math.round(s.speed)));
+    s.damage = Math.min(10, Math.max(1, Math.round(s.damage)));
+    s.defense = Math.min(10, Math.max(1, Math.round(s.defense)));
+    s.chaos = Math.min(10, Math.max(1, Math.round(s.chaos)));
 
-  if (!data.move_loadout) return 'missing move_loadout';
-  if (!LIGHT_ATTACKS.includes(data.move_loadout.light_attack)) return `invalid light_attack: ${data.move_loadout.light_attack}`;
-  if (!HEAVY_ATTACKS.includes(data.move_loadout.heavy_attack)) return `invalid heavy_attack: ${data.move_loadout.heavy_attack}`;
-  if (!SPECIALS.includes(data.move_loadout.special)) return `invalid special: ${data.move_loadout.special}`;
-  if (!PROJECTILES.includes(data.move_loadout.projectile_sprite)) return `invalid projectile_sprite: ${data.move_loadout.projectile_sprite}`;
+    // Force sum to 24 by adjusting the largest stat
+    const sum = s.speed + s.damage + s.defense + s.chaos;
+    if (sum !== 24) {
+      const diff = 24 - sum;
+      const fields: ('speed' | 'damage' | 'defense' | 'chaos')[] = ['speed', 'damage', 'defense', 'chaos'];
+      fields.sort((a, b) => s[b] - s[a]);
+      s[fields[0]] = Math.min(10, Math.max(1, s[fields[0]] + diff));
+    }
+  }
+
+  if (!data.move_loadout) {
+    data.move_loadout = { light_attack: 'punch', heavy_attack: 'body_slam', special: 'shockwave', projectile_sprite: 'rocks' };
+  } else {
+    if (!LIGHT_ATTACKS.includes(data.move_loadout.light_attack)) data.move_loadout.light_attack = 'punch';
+    if (!HEAVY_ATTACKS.includes(data.move_loadout.heavy_attack)) data.move_loadout.heavy_attack = 'body_slam';
+    if (!SPECIALS.includes(data.move_loadout.special)) data.move_loadout.special = 'shockwave';
+    if (!PROJECTILES.includes(data.move_loadout.projectile_sprite)) data.move_loadout.projectile_sprite = 'rocks';
+  }
 
   return null;
 }
@@ -195,5 +255,56 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   console.log(`[generate-fighter] Success: generated "${parsed.name}"`);
-  return res.status(200).json(parsed);
+
+  // Generate commentary audio via ElevenLabs TTS (non-blocking — never breaks fighter gen)
+  let commentary: Record<string, string> | null = null;
+  const elevenLabsKey = process.env.ELEVENLABS_API_KEY;
+  if (elevenLabsKey && parsed.name) {
+    try {
+      const voiceId = 'pNInz6obpgDQGcFmaJgB'; // Adam
+      const lines: Record<string, string> = {
+        intro: `${parsed.name} enters the arena!`,
+        special: `${parsed.name} unleashes their special move!`,
+        low_health: `${parsed.name} is on the ropes! One more hit could end it!`,
+        victory: `${parsed.victory_line || parsed.name + ' wins!'}`,
+      };
+
+      const ttsResults = await Promise.allSettled(
+        Object.entries(lines).map(async ([key, text]) => {
+          const ttsRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+            method: 'POST',
+            headers: {
+              'xi-api-key': elevenLabsKey,
+              'Content-Type': 'application/json',
+              'Accept': 'audio/mpeg',
+            },
+            body: JSON.stringify({
+              text,
+              model_id: 'eleven_monolingual_v1',
+              voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+            }),
+          });
+          if (!ttsRes.ok) throw new Error(`TTS ${key}: ${ttsRes.status}`);
+          const arrayBuf = await ttsRes.arrayBuffer();
+          const base64 = Buffer.from(arrayBuf).toString('base64');
+          return { key, base64 };
+        })
+      );
+
+      commentary = {};
+      for (const result of ttsResults) {
+        if (result.status === 'fulfilled') {
+          commentary[result.value.key] = result.value.base64;
+        }
+      }
+      // If no clips succeeded, null out
+      if (Object.keys(commentary).length === 0) commentary = null;
+      else console.log(`[generate-fighter] Commentary generated: ${Object.keys(commentary).join(', ')}`);
+    } catch (ttsErr) {
+      console.warn(`[generate-fighter] Commentary generation failed (non-fatal):`, ttsErr);
+      commentary = null;
+    }
+  }
+
+  return res.status(200).json({ ...parsed, commentary });
 }

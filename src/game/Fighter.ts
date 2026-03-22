@@ -1,6 +1,84 @@
 import { Container, Graphics } from 'pixi.js';
-import { type FighterConfig, type EyeExpression, type SilhouetteConfig } from '../ai/fighterConfig';
+import { gsap } from 'gsap';
+import { type FighterConfig, type EyeExpression, type SilhouetteConfig, type DominantAccessory } from '../ai/fighterConfig';
 import { getMoveDef, type MoveDefinition } from '../ai/moveLibrary';
+
+interface CharacterStyle {
+  proportions: {
+    bodyWidthMul: number;
+    bodyHeightMul: number;
+    headScaleMul: number;
+    limbLengthMul: number;
+    limbThicknessMul: number;
+  };
+  motion: {
+    idleAmplitude: number;
+    idleSpeed: number;
+    attackSwingAngle: number;
+    bobLimbDamping: number;
+    centerOfMassOffsetY: number;
+  };
+  visuals: {
+    shadowScale: number;
+    bodyCornerRadius: number;
+  };
+}
+
+const DEFAULT_STYLE: CharacterStyle = {
+  proportions: {
+    bodyWidthMul: 1.0,
+    bodyHeightMul: 1.0,
+    headScaleMul: 1.0,
+    limbLengthMul: 1.0,
+    limbThicknessMul: 1.0,
+  },
+  motion: {
+    idleAmplitude: 2.0,
+    idleSpeed: 0.05,
+    attackSwingAngle: 0.8,
+    bobLimbDamping: 0.5,
+    centerOfMassOffsetY: 0,
+  },
+  visuals: {
+    shadowScale: 1.0,
+    bodyCornerRadius: 0.42,
+  },
+};
+
+function deriveStyle(config: FighterConfig): CharacterStyle {
+  const { size_variant, stats } = config;
+
+  const sizePresets: Record<string, { bodyW: number; bodyH: number; head: number; limbLen: number; limbThick: number; comY: number }> = {
+    light:  { bodyW: 0.82, bodyH: 1.0, head: 1.05, limbLen: 1.0, limbThick: 0.82, comY: -6 },
+    medium: { bodyW: 1.0,  bodyH: 1.0, head: 1.0,  limbLen: 1.0, limbThick: 1.0,  comY: 0 },
+    heavy:  { bodyW: 1.35, bodyH: 1.0, head: 0.9,  limbLen: 1.0, limbThick: 1.3,  comY: 8 },
+  };
+  const base = sizePresets[size_variant] ?? sizePresets.medium;
+
+  const speedFactor = stats.speed / 6;
+  const chaosFactor = stats.chaos / 6;
+
+  return {
+    proportions: {
+      bodyWidthMul: base.bodyW,
+      bodyHeightMul: base.bodyH,
+      headScaleMul: base.head,
+      limbLengthMul: base.limbLen,
+      limbThicknessMul: base.limbThick,
+    },
+    motion: {
+      idleAmplitude: 1.5 + chaosFactor * 1.0,
+      idleSpeed: 0.04 + speedFactor * 0.02,
+      attackSwingAngle: 0.6 + (stats.damage / 10) * 0.4,
+      bobLimbDamping: 0.3 + chaosFactor * 0.4,
+      centerOfMassOffsetY: base.comY,
+    },
+    visuals: {
+      shadowScale: base.bodyW,
+      bodyCornerRadius: size_variant === 'heavy' ? 0.35 : 0.42,
+    },
+  };
+}
 
 interface SizeParams {
   headRadius: number;
@@ -67,10 +145,19 @@ export class Fighter {
   private weapon: Graphics;
   private leftEye: Graphics;
   private rightEye: Graphics;
+  private shadow: Graphics;
+  private leftFoot: Graphics;
+  private rightFoot: Graphics;
+  private accentDetail: Graphics;
+  private accessoryBehind: Graphics;
+  private accessoryFront: Graphics;
   private sizeParams: SizeParams;
+  private style: CharacterStyle;
 
   // Animation
   private animFrame: number = 0;
+  private idlePhase: number = 0;
+  private flashTimer: ReturnType<typeof setTimeout> | null = null;
   private currentExpression: EyeExpression;
   private screenScale: number = 1;
 
@@ -80,6 +167,7 @@ export class Fighter {
     this.y = startY;
     this.facing = facing;
     this.currentExpression = config.eye_expression;
+    this.idlePhase = Math.random() * Math.PI * 2;
     this.screenScale = Math.min(canvasWidth, canvasHeight) / 800;
     const base = SIZE_PARAMS[config.size_variant] ?? SIZE_PARAMS.medium;
     this.sizeParams = {
@@ -94,30 +182,43 @@ export class Fighter {
       weaponHeight: base.weaponHeight * this.screenScale,
       scale: base.scale,
     };
+    this.style = config.silhouette ? deriveStyle(config) : DEFAULT_STYLE;
 
     this.container = new Container();
     this.container.x = startX;
     this.container.y = startY;
 
     // Create graphics parts
+    this.shadow = new Graphics();
+    this.leftFoot = new Graphics();
+    this.rightFoot = new Graphics();
     this.leftLeg = new Graphics();
     this.rightLeg = new Graphics();
+    this.accessoryBehind = new Graphics();
     this.body = new Graphics();
+    this.accentDetail = new Graphics();
     this.leftArm = new Graphics();
     this.rightArm = new Graphics();
     this.head = new Graphics();
+    this.accessoryFront = new Graphics();
     this.weapon = new Graphics();
     this.leftEye = new Graphics();
     this.rightEye = new Graphics();
 
     // Add in z-order (back to front)
+    this.container.addChild(this.shadow);
+    this.container.addChild(this.leftFoot);
+    this.container.addChild(this.rightFoot);
     this.container.addChild(this.leftLeg);
     this.container.addChild(this.rightLeg);
+    this.container.addChild(this.accessoryBehind);  // wings, cape, spikes — behind body
     this.container.addChild(this.leftArm);
     this.container.addChild(this.body);
+    this.container.addChild(this.accentDetail);
     this.container.addChild(this.rightArm);
     this.container.addChild(this.weapon);
     this.container.addChild(this.head);
+    this.container.addChild(this.accessoryFront);    // hats, horns, visor — in front
     this.container.addChild(this.leftEye);
     this.container.addChild(this.rightEye);
 
@@ -139,140 +240,399 @@ export class Fighter {
     this.container.scale.x = this.facing;
   }
 
-  private drawSilhouette(sil: SilhouetteConfig): void {
-    const sc = this.screenScale * sil.scale;
-    const bw = sil.body_width * sc;
-    const bh = sil.body_height * sc;
-    const hs = sil.head_size * sc;
-    const primaryColor = this.hexToNum(sil.color_primary);
-    const outlineColor = this.hexToNum(sil.color_outline);
+  /** Darken a hex color by a factor (0 = black, 1 = unchanged) */
+  private darkenColor(hex: string, factor: number): number {
+    const n = this.hexToNum(hex);
+    const r = Math.floor(((n >> 16) & 0xff) * factor);
+    const g = Math.floor(((n >> 8) & 0xff) * factor);
+    const b = Math.floor((n & 0xff) * factor);
+    return (r << 16) | (g << 8) | b;
+  }
+
+
+  /** Fixed rig dimensions — base skeleton scaled by CharacterStyle multipliers */
+  private getRigDimensions(): {
+    sc: number; bw: number; bh: number; headR: number;
+    footW: number; footH: number; footR: number;
+    legW: number; legH: number; legR: number;
+    armW: number; armH: number; armR: number;
+    legSpacing: number; totalLegsAndFeet: number;
+    bodyBottom: number; headOverlap: number; headCenterY: number;
+    armX: number; armY: number;
+  } {
+    const sc = this.screenScale * 1.1;
+    const p = this.style.proportions;
+    const bw = 65 * sc * p.bodyWidthMul;
+    const bh = 58 * sc * p.bodyHeightMul;
+    const headR = 26 * sc * p.headScaleMul;
+    const footW = 22 * sc * p.bodyWidthMul;
+    const footH = 14 * sc;
+    const footR = 7 * sc;
+    const legW = 16 * sc * p.limbThicknessMul;
+    const legH = 28 * sc * p.limbLengthMul;
+    const legR = 8 * sc;
+    const armW = 14 * sc * p.limbThicknessMul;
+    const armH = 32 * sc * p.limbLengthMul;
+    const armR = 7 * sc;
+    const legSpacing = bw * 0.22;
+    const totalLegsAndFeet = footH + legH;
+    const headOverlap = headR * 0.4;
+    const bodyBottom = -totalLegsAndFeet + 2 * sc;
+    const headCenterY = bodyBottom - bh + headOverlap - headR;
+    const armX = bw / 2 - 4 * sc;
+    const armY = bodyBottom - bh + bh * 0.15;
+    return {
+      sc, bw, bh, headR, footW, footH, footR,
+      legW, legH, legR, armW, armH, armR,
+      legSpacing, totalLegsAndFeet, bodyBottom,
+      headOverlap, headCenterY, armX, armY,
+    };
+  }
+
+  private drawSilhouette(_sil: SilhouetteConfig): void {
+    const r = this.getRigDimensions();
+    const { sc, bw, bh } = r;
+
+    // Colors from palette only — ignore sil shape/size fields
+    const primary = this.hexToNum(this.config.color_palette.primary);
+    const secondary = this.hexToNum(this.config.color_palette.secondary);
     const accent = this.hexToNum(this.config.color_palette.accent);
+    const darkPrimary = this.darkenColor(this.config.color_palette.primary, 0.55);
 
     // Clear all parts
-    this.head.clear();
-    this.body.clear();
-    this.leftArm.clear();
-    this.rightArm.clear();
+    this.shadow.clear();
+    this.leftFoot.clear();
+    this.rightFoot.clear();
     this.leftLeg.clear();
     this.rightLeg.clear();
+    this.accessoryBehind.clear();
+    this.leftArm.clear();
+    this.rightArm.clear();
+    this.body.clear();
+    this.accentDetail.clear();
+    this.head.clear();
+    this.accessoryFront.clear();
     this.weapon.clear();
     this.leftEye.clear();
     this.rightEye.clear();
 
-    // --- Glow/outline layer (drawn slightly larger, behind, at 40% alpha) ---
-    const glowPad = 4 * sc;
-    this.drawBodyShape(this.leftArm, sil.body_shape, bw + glowPad * 2, bh + glowPad * 2, -glowPad, { color: outlineColor, alpha: 0.4 });
+    // ========== 1. SHADOW ==========
+    this.shadow.ellipse(0, 4 * sc, bw * 0.4 * this.style.visuals.shadowScale, 6 * sc);
+    this.shadow.fill({ color: 0x000000, alpha: 0.2 });
 
-    // Draw glow for head
-    if (sil.head_shape !== 'none') {
-      this.drawHeadShape(this.rightArm, sil.head_shape, hs + glowPad, bh, { color: outlineColor, alpha: 0.4 });
-    }
+    // ========== 2. FEET — wide flat rects, splayed outward ==========
+    this.leftFoot.roundRect(
+      -r.legSpacing - r.footW / 2 - 2 * sc,
+      -r.footH + 2 * sc,
+      r.footW, r.footH, r.footR,
+    );
+    this.leftFoot.fill(darkPrimary);
+    this.rightFoot.roundRect(
+      r.legSpacing - r.footW / 2 + 2 * sc,
+      -r.footH + 2 * sc,
+      r.footW, r.footH, r.footR,
+    );
+    this.rightFoot.fill(darkPrimary);
 
-    // --- Primary body ---
-    this.drawBodyShape(this.body, sil.body_shape, bw, bh, 0, primaryColor);
+    // ========== 3. LEGS — sausage shape ==========
+    this.leftLeg.roundRect(
+      -r.legSpacing - r.legW / 2,
+      -r.footH - r.legH + 2 * sc,
+      r.legW, r.legH, r.legR,
+    );
+    this.leftLeg.fill(secondary);
+    this.rightLeg.roundRect(
+      r.legSpacing - r.legW / 2,
+      -r.footH - r.legH + 2 * sc,
+      r.legW, r.legH, r.legR,
+    );
+    this.rightLeg.fill(secondary);
 
-    // --- Head ---
-    if (sil.head_shape !== 'none') {
-      this.drawHeadShape(this.head, sil.head_shape, hs, bh, primaryColor);
-    }
+    // ========== 4. BODY — chunky blob ==========
+    const bodyRadius = bw * this.style.visuals.bodyCornerRadius;
+    this.body.roundRect(-bw / 2, r.bodyBottom - bh, bw, bh, bodyRadius);
+    this.body.fill(primary);
 
-    // --- Legs ---
-    const limbDims = this.getLimbDimensions(sil.limb_style, sc);
-    if (limbDims) {
-      const legSpacing = bw * 0.25;
-      // Left leg glow
-      this.leftLeg.roundRect(-legSpacing - limbDims.w / 2 - glowPad / 2, glowPad * -0.5, limbDims.w + glowPad, limbDims.h + glowPad, 3);
-      this.leftLeg.fill({ color: outlineColor, alpha: 0.4 });
-      // Left leg
-      this.leftLeg.roundRect(-legSpacing - limbDims.w / 2, 0, limbDims.w, limbDims.h, 3);
-      this.leftLeg.fill(primaryColor);
+    // ========== 5. ACCENT — clothing stripe ==========
+    const accentW = bw * 0.6;
+    const accentH = 8 * sc;
+    const accentY = r.bodyBottom - bh + bh * 0.2;
+    this.accentDetail.roundRect(-accentW / 2, accentY, accentW, accentH, 3 * sc);
+    this.accentDetail.fill(accent);
 
-      // Right leg glow
-      this.rightLeg.roundRect(legSpacing - limbDims.w / 2 - glowPad / 2, glowPad * -0.5, limbDims.w + glowPad, limbDims.h + glowPad, 3);
-      this.rightLeg.fill({ color: outlineColor, alpha: 0.4 });
-      // Right leg
-      this.rightLeg.roundRect(legSpacing - limbDims.w / 2, 0, limbDims.w, limbDims.h, 3);
-      this.rightLeg.fill(primaryColor);
-    }
+    // ========== 6. ARMS — thick sausage limbs, ±12° ==========
+    this.leftArm.roundRect(-r.armW / 2, 0, r.armW, r.armH, r.armR);
+    this.leftArm.fill(primary);
+    this.leftArm.x = -r.armX;
+    this.leftArm.y = r.armY;
+    this.leftArm.rotation = -0.21; // ~-12 degrees
+    this.rightArm.roundRect(-r.armW / 2, 0, r.armW, r.armH, r.armR);
+    this.rightArm.fill(primary);
+    this.rightArm.x = r.armX;
+    this.rightArm.y = r.armY;
+    this.rightArm.rotation = 0.21; // ~+12 degrees
 
-    // --- Eyes (reuse existing eye system) ---
-    const eyeParams: SizeParams = {
-      ...this.sizeParams,
-      bodyHeight: bh,
-      headRadius: hs / 2,
-    };
-    this.drawEyes(eyeParams, accent);
+    // ========== 7. HEAD — oversized circle ==========
+    this.head.circle(0, r.headCenterY, r.headR);
+    this.head.fill(primary);
 
-    // --- Weapon (on leading hand side) ---
-    const weaponW = this.sizeParams.weaponWidth;
-    const weaponH = this.sizeParams.weaponHeight;
-    const weaponX = bw / 2 + 4;
-    this.weapon.roundRect(weaponX, -bh - 5, weaponW, weaponH, 2);
-    this.weapon.fill(this.hexToNum(this.config.color_palette.accent));
+    // ========== 8. EYES — white sclera + black pupils ==========
+    const eyeSize = 8 * sc;
+    const pupilSize = 4 * sc;
+    const eyeSpacing = r.headR * 0.35;
+    const eyeY = r.headCenterY - r.headR * 0.08;
+    this.drawChunkyEyes(eyeSpacing, eyeY, eyeSize, pupilSize, accent);
+
+    // ========== 9. WEAPON — on leading hand ==========
+    const weaponW = 8 * sc;
+    const weaponH = 22 * sc;
+    this.weapon.roundRect(-weaponW / 2, r.armH * 0.6, weaponW, weaponH, 3 * sc);
+    this.weapon.fill(accent);
+    this.weapon.x = r.armX;
+    this.weapon.y = r.armY;
+    this.weapon.rotation = 0.21;
+
+    // ========== 10. DOMINANT ACCESSORY ==========
+    this.drawDominantAccessory(this.config.dominant_accessory ?? null, r, accent, primary);
   }
 
-  private drawBodyShape(
-    gfx: Graphics,
-    shape: string,
-    w: number,
-    h: number,
-    offsetY: number,
-    fill: number | { color: number; alpha: number },
+  private drawDominantAccessory(
+    type: DominantAccessory | string | null,
+    r: {
+      sc: number; bw: number; bh: number; headR: number;
+      footW: number; footH: number; footR: number;
+      legW: number; legH: number; legR: number;
+      armW: number; armH: number; armR: number;
+      legSpacing: number; totalLegsAndFeet: number;
+      bodyBottom: number; headOverlap: number; headCenterY: number;
+      armX: number; armY: number;
+    },
+    accent: number,
+    primary: number,
   ): void {
-    switch (shape) {
-      case 'circle':
-        gfx.ellipse(0, -h / 2 + offsetY, w / 2, h / 2);
+    if (!type) return;
+
+    const { sc, bw, bh, headR, headCenterY, bodyBottom, armH, armX, armY } = r;
+    const headTop = headCenterY - headR;
+
+    // Behind-body accessories
+    switch (type) {
+      case 'wings': {
+        const wingW = bw * 0.8;
+        const wingH = bh * 1.2;
+        const wingY = bodyBottom - bh * 0.6;
+        // Left wing
+        this.accessoryBehind.moveTo(-bw * 0.3, wingY);
+        this.accessoryBehind.lineTo(-bw * 0.3 - wingW, wingY - wingH * 0.3);
+        this.accessoryBehind.lineTo(-bw * 0.15, wingY + wingH * 0.5);
+        this.accessoryBehind.closePath();
+        this.accessoryBehind.fill({ color: accent, alpha: 0.7 });
+        // Right wing
+        this.accessoryBehind.moveTo(bw * 0.3, wingY);
+        this.accessoryBehind.lineTo(bw * 0.3 + wingW, wingY - wingH * 0.3);
+        this.accessoryBehind.lineTo(bw * 0.15, wingY + wingH * 0.5);
+        this.accessoryBehind.closePath();
+        this.accessoryBehind.fill({ color: accent, alpha: 0.7 });
         break;
-      case 'triangle':
-        gfx.moveTo(0, -h + offsetY);
-        gfx.lineTo(w / 2, offsetY);
-        gfx.lineTo(-w / 2, offsetY);
-        gfx.closePath();
+      }
+      case 'cape_large': {
+        const capeW = bw * 0.9;
+        const capeH = bh * 1.5;
+        const capeTop = bodyBottom - bh * 0.8;
+        this.accessoryBehind.moveTo(-capeW / 2, capeTop);
+        this.accessoryBehind.lineTo(capeW / 2, capeTop);
+        this.accessoryBehind.lineTo(capeW * 0.35, capeTop + capeH);
+        this.accessoryBehind.lineTo(-capeW * 0.35, capeTop + capeH);
+        this.accessoryBehind.closePath();
+        this.accessoryBehind.fill({ color: accent, alpha: 0.6 });
         break;
-      case 'rectangle_tall':
-      case 'rectangle_wide':
-      case 'square':
-      default:
-        gfx.roundRect(-w / 2, -h + offsetY, w, h, 6);
+      }
+      case 'spikes_back': {
+        const spikeCount = 5;
+        const spikeH = bh * 0.5;
+        const startY = bodyBottom - bh;
+        for (let i = 0; i < spikeCount; i++) {
+          const sy = startY + (bh / spikeCount) * i;
+          const tipX = -bw * 0.5 - spikeH * (0.6 + Math.random() * 0.4);
+          this.accessoryBehind.moveTo(-bw * 0.35, sy);
+          this.accessoryBehind.lineTo(tipX, sy - spikeH * 0.15);
+          this.accessoryBehind.lineTo(-bw * 0.35, sy + bh / spikeCount * 0.6);
+          this.accessoryBehind.closePath();
+          this.accessoryBehind.fill({ color: accent, alpha: 0.65 });
+        }
         break;
+      }
+      case 'aura': {
+        // Glowing energy rings behind the body
+        const auraR1 = bw * 0.7;
+        const auraR2 = bw * 0.9;
+        const auraCY = bodyBottom - bh * 0.5;
+        this.accessoryBehind.ellipse(0, auraCY, auraR2, bh * 0.8);
+        this.accessoryBehind.fill({ color: accent, alpha: 0.12 });
+        this.accessoryBehind.ellipse(0, auraCY, auraR1, bh * 0.6);
+        this.accessoryBehind.fill({ color: accent, alpha: 0.18 });
+        break;
+      }
     }
-    gfx.fill(fill);
+
+    // Front accessories (drawn after head)
+    switch (type) {
+      case 'wizard_hat': {
+        const hatH = headR * 1.8;
+        const hatBaseW = headR * 1.6;
+        // Brim
+        this.accessoryFront.ellipse(0, headTop + 2 * sc, hatBaseW * 0.7, 4 * sc);
+        this.accessoryFront.fill(accent);
+        // Cone
+        this.accessoryFront.moveTo(0, headTop - hatH);
+        this.accessoryFront.lineTo(hatBaseW * 0.5, headTop + 2 * sc);
+        this.accessoryFront.lineTo(-hatBaseW * 0.5, headTop + 2 * sc);
+        this.accessoryFront.closePath();
+        this.accessoryFront.fill(accent);
+        break;
+      }
+      case 'horns': {
+        const hornH = headR * 1.4;
+        const hornW = headR * 0.35;
+        // Left horn
+        this.accessoryFront.moveTo(-headR * 0.5, headTop + headR * 0.2);
+        this.accessoryFront.lineTo(-headR * 0.8 - hornW, headTop - hornH);
+        this.accessoryFront.lineTo(-headR * 0.3, headTop + headR * 0.1);
+        this.accessoryFront.closePath();
+        this.accessoryFront.fill(accent);
+        // Right horn
+        this.accessoryFront.moveTo(headR * 0.5, headTop + headR * 0.2);
+        this.accessoryFront.lineTo(headR * 0.8 + hornW, headTop - hornH);
+        this.accessoryFront.lineTo(headR * 0.3, headTop + headR * 0.1);
+        this.accessoryFront.closePath();
+        this.accessoryFront.fill(accent);
+        break;
+      }
+      case 'antenna': {
+        const antennaH = headR * 1.6;
+        const ballR = 4 * sc;
+        this.accessoryFront.rect(-1.5 * sc, headTop - antennaH, 3 * sc, antennaH);
+        this.accessoryFront.fill({ color: accent, alpha: 0.8 });
+        this.accessoryFront.circle(0, headTop - antennaH, ballR);
+        this.accessoryFront.fill({ color: 0xffffcc, alpha: 0.9 });
+        break;
+      }
+      case 'halo': {
+        const haloR = headR * 1.1;
+        const haloY = headTop - headR * 0.3;
+        this.accessoryFront.ellipse(0, haloY, haloR, 4 * sc);
+        this.accessoryFront.fill({ color: 0xffdd44, alpha: 0.7 });
+        // Inner cutout effect
+        this.accessoryFront.ellipse(0, haloY, haloR * 0.7, 2.5 * sc);
+        this.accessoryFront.fill({ color: primary, alpha: 0.0 });
+        break;
+      }
+      case 'shoulder_plates': {
+        const plateW = bw * 0.35;
+        const plateH = bh * 0.25;
+        const plateY = bodyBottom - bh * 0.85;
+        // Left plate
+        this.accessoryFront.roundRect(-bw / 2 - plateW * 0.6, plateY, plateW, plateH, 4 * sc);
+        this.accessoryFront.fill(accent);
+        // Right plate
+        this.accessoryFront.roundRect(bw / 2 - plateW * 0.4, plateY, plateW, plateH, 4 * sc);
+        this.accessoryFront.fill(accent);
+        break;
+      }
+      case 'scarf_trail': {
+        const scarfW = 6 * sc;
+        const scarfLen = bh * 1.3;
+        const scarfY = headCenterY + headR * 0.5;
+        // Wrap around neck
+        this.accessoryFront.roundRect(-headR * 0.6, scarfY, headR * 1.2, 6 * sc, 3 * sc);
+        this.accessoryFront.fill(accent);
+        // Trailing end
+        this.accessoryFront.moveTo(-headR * 0.6, scarfY + 3 * sc);
+        this.accessoryFront.lineTo(-headR * 0.6 - bw * 0.4, scarfY + scarfLen);
+        this.accessoryFront.lineTo(-headR * 0.6 - bw * 0.4 + scarfW, scarfY + scarfLen * 0.85);
+        this.accessoryFront.lineTo(-headR * 0.4, scarfY + 6 * sc);
+        this.accessoryFront.closePath();
+        this.accessoryFront.fill({ color: accent, alpha: 0.75 });
+        break;
+      }
+      case 'giant_weapon': {
+        const gwW = 10 * sc;
+        const gwH = armH * 1.8;
+        this.accessoryFront.roundRect(-gwW / 2, 0, gwW, gwH, 3 * sc);
+        this.accessoryFront.fill(accent);
+        // Crossguard
+        this.accessoryFront.roundRect(-gwW * 1.2, gwH * 0.15, gwW * 2.4, 4 * sc, 2 * sc);
+        this.accessoryFront.fill(accent);
+        this.accessoryFront.x = armX;
+        this.accessoryFront.y = armY;
+        this.accessoryFront.rotation = 0.21;
+        break;
+      }
+      case 'visor': {
+        const visorW = headR * 1.8;
+        const visorH = headR * 0.35;
+        const visorY = headCenterY - headR * 0.1;
+        this.accessoryFront.roundRect(-visorW / 2, visorY, visorW, visorH, 3 * sc);
+        this.accessoryFront.fill({ color: accent, alpha: 0.85 });
+        break;
+      }
+      case 'mask': {
+        const maskW = headR * 1.5;
+        const maskH = headR * 0.8;
+        const maskY = headCenterY - maskH * 0.4;
+        this.accessoryFront.roundRect(-maskW / 2, maskY, maskW, maskH, 5 * sc);
+        this.accessoryFront.fill({ color: accent, alpha: 0.8 });
+        // Eye slits
+        const slitW = maskW * 0.2;
+        const slitH = maskH * 0.25;
+        const slitY = maskY + maskH * 0.25;
+        this.accessoryFront.roundRect(-headR * 0.35 - slitW / 2, slitY, slitW, slitH, 2 * sc);
+        this.accessoryFront.fill({ color: 0x000000, alpha: 0.9 });
+        this.accessoryFront.roundRect(headR * 0.35 - slitW / 2, slitY, slitW, slitH, 2 * sc);
+        this.accessoryFront.fill({ color: 0x000000, alpha: 0.9 });
+        break;
+      }
+    }
   }
 
-  private drawHeadShape(
-    gfx: Graphics,
-    shape: string,
-    size: number,
-    bodyHeight: number,
-    fill: number | { color: number; alpha: number },
+  /** Chunky eyes: white sclera + black pupil, with expression offsets */
+  private drawChunkyEyes(
+    spacing: number, cy: number,
+    eyeSize: number, pupilSize: number,
+    _accentColor: number,
   ): void {
-    const cy = -bodyHeight - size / 2;
-    switch (shape) {
-      case 'square':
-        gfx.roundRect(-size / 2, cy - size / 2, size, size, 4);
-        break;
-      case 'triangle':
-        gfx.moveTo(0, cy - size / 2);
-        gfx.lineTo(size / 2, cy + size / 2);
-        gfx.lineTo(-size / 2, cy + size / 2);
-        gfx.closePath();
-        break;
-      case 'circle':
-      default:
-        gfx.circle(0, cy, size / 2);
-        break;
-    }
-    gfx.fill(fill);
-  }
+    this.leftEye.clear();
+    this.rightEye.clear();
 
-  private getLimbDimensions(style: string, sc: number): { w: number; h: number } | null {
-    switch (style) {
-      case 'stubby': return { w: 12 * sc, h: 16 * sc };
-      case 'normal': return { w: 10 * sc, h: 22 * sc };
-      case 'long':   return { w: 8 * sc, h: 32 * sc };
-      case 'none':   return null;
-      default:       return { w: 10 * sc, h: 22 * sc };
+    let lyOff = 0, ryOff = 0;
+    let lScale = 1, rScale = 1;
+    let pupilColor = 0x111111;
+
+    switch (this.currentExpression) {
+      case 'angry':
+        lyOff = -1; ryOff = 1; break;
+      case 'greedy':
+        lScale = 1.2; rScale = 1.2; pupilColor = 0x332200; break;
+      case 'scared':
+        lScale = 1.4; rScale = 1.4; lyOff = -2; ryOff = -2; break;
+      case 'unhinged':
+        lScale = 1.5; rScale = 0.7; ryOff = 2; break;
+      default: break;
     }
+
+    // Left eye — white sclera
+    this.leftEye.circle(-spacing, cy + lyOff, eyeSize * lScale);
+    this.leftEye.fill(0xffffff);
+    // Left pupil
+    this.leftEye.circle(-spacing + 1, cy + lyOff, pupilSize * lScale);
+    this.leftEye.fill(pupilColor);
+
+    // Right eye — white sclera
+    this.rightEye.circle(spacing, cy + ryOff, eyeSize * rScale);
+    this.rightEye.fill(0xffffff);
+    // Right pupil
+    this.rightEye.circle(spacing + 1, cy + ryOff, pupilSize * rScale);
+    this.rightEye.fill(pupilColor);
   }
 
   private drawClassic(): void {
@@ -281,7 +641,13 @@ export class Fighter {
     const secondary = this.hexToNum(this.config.color_palette.secondary);
     const accent = this.hexToNum(this.config.color_palette.accent);
 
-    // Clear all
+    // Clear all (including new chunky parts)
+    this.shadow.clear();
+    this.leftFoot.clear();
+    this.rightFoot.clear();
+    this.accentDetail.clear();
+    this.accessoryBehind.clear();
+    this.accessoryFront.clear();
     this.head.clear();
     this.body.clear();
     this.leftArm.clear();
@@ -291,6 +657,16 @@ export class Fighter {
     this.weapon.clear();
     this.leftEye.clear();
     this.rightEye.clear();
+    // Reset rotations for classic mode
+    this.leftArm.rotation = 0;
+    this.rightArm.rotation = 0;
+    this.weapon.rotation = 0;
+    this.leftArm.x = 0;
+    this.leftArm.y = 0;
+    this.rightArm.x = 0;
+    this.rightArm.y = 0;
+    this.weapon.x = 0;
+    this.weapon.y = 0;
 
     // Body
     this.body.roundRect(-s.bodyWidth / 2, -s.bodyHeight, s.bodyWidth, s.bodyHeight, 6);
@@ -375,9 +751,19 @@ export class Fighter {
 
   setExpression(expr: EyeExpression): void {
     this.currentExpression = expr;
-    const s = this.sizeParams;
-    const accent = this.hexToNum(this.config.color_palette.accent);
-    this.drawEyes(s, accent);
+    if (this.config.silhouette) {
+      const r = this.getRigDimensions();
+      const eyeSize = 8 * r.sc;
+      const pupilSize = 4 * r.sc;
+      const eyeSpacing = r.headR * 0.35;
+      const eyeY = r.headCenterY - r.headR * 0.08;
+      const accent = this.hexToNum(this.config.color_palette.accent);
+      this.drawChunkyEyes(eyeSpacing, eyeY, eyeSize, pupilSize, accent);
+    } else {
+      const s = this.sizeParams;
+      const accent = this.hexToNum(this.config.color_palette.accent);
+      this.drawEyes(s, accent);
+    }
   }
 
   getMoveDef(type: 'light' | 'heavy' | 'special'): MoveDefinition {
@@ -406,6 +792,10 @@ export class Fighter {
   }
 
   get hitboxWidth(): number {
+    const isSil = !!this.config.silhouette;
+    if (isSil) {
+      return this.getRigDimensions().bw + 10;
+    }
     return this.sizeParams.bodyWidth + 10;
   }
 
@@ -446,7 +836,9 @@ export class Fighter {
     }
 
     // Arena bounds
-    const halfW = this.sizeParams.bodyWidth / 2 + 10;
+    const isSilBounds = !!this.config.silhouette;
+    const boundsW = isSilBounds ? this.getRigDimensions().bw : this.sizeParams.bodyWidth;
+    const halfW = boundsW / 2 + 10;
     if (this.x < halfW) this.x = halfW;
     if (this.x > arenaWidth - halfW) this.x = arenaWidth - halfW;
 
@@ -455,22 +847,44 @@ export class Fighter {
     this.container.y = this.y;
 
     // Idle bob animation
+    const isSil = !!this.config.silhouette;
     if (this.state === 'idle' || this.state === 'walking') {
-      const bob = Math.sin(this.animFrame * 0.05) * 2;
-      this.body.y = bob;
-      this.head.y = bob;
-      this.leftEye.y = bob;
-      this.rightEye.y = bob;
-      this.weapon.y = bob;
-      this.leftArm.y = bob * 0.5;
-      this.rightArm.y = bob * 0.5;
+      const { idleAmplitude, idleSpeed, bobLimbDamping, centerOfMassOffsetY } = this.style.motion;
+      const bob = Math.sin(this.animFrame * idleSpeed + this.idlePhase) * idleAmplitude;
+      const comY = centerOfMassOffsetY;
+      const headBob = bob * 1.4;
+      this.body.y = bob + comY;
+      this.head.y = headBob + comY;
+      this.leftEye.y = headBob + comY;
+      this.rightEye.y = headBob + comY;
+      this.accentDetail.y = bob + comY;
+      if (isSil) {
+        const r = this.getRigDimensions();
+        this.leftArm.y = r.armY + bob * bobLimbDamping + comY;
+        this.rightArm.y = r.armY + bob * bobLimbDamping + comY;
+        this.weapon.y = r.armY + bob * bobLimbDamping + comY;
+      } else {
+        this.leftArm.y = bob * 0.5;
+        this.rightArm.y = bob * 0.5;
+        this.weapon.y = bob;
+      }
     }
 
     // Attack animation (arm swing)
     if (this.state === 'attacking') {
-      const swing = -20;
-      this.rightArm.y = swing;
-      this.weapon.y = swing;
+      if (isSil) {
+        const swing = -this.style.motion.attackSwingAngle;
+        this.rightArm.rotation = swing;
+        this.weapon.rotation = swing;
+      } else {
+        const swing = -20;
+        this.rightArm.y = swing;
+        this.weapon.y = swing;
+      }
+    } else if (isSil) {
+      // Reset arm rotation when not attacking
+      this.rightArm.rotation = 0.21;
+      this.weapon.rotation = 0.21;
     }
   }
 
@@ -528,7 +942,36 @@ export class Fighter {
 
     if (this.hp <= 0) {
       this.state = 'dead';
+      // Death fade — no flash
+      gsap.to(this.container, { alpha: 0, duration: 0.4 });
+    } else {
+      // Hit flash — white tint then restore
+      this.flashWhite();
     }
+  }
+
+  private flashWhite(): void {
+    // Cancel any pending restore from a previous flash
+    if (this.flashTimer !== null) {
+      clearTimeout(this.flashTimer);
+      this.flashTimer = null;
+    }
+
+    // Redraw all parts in pure white to create flash effect
+    const parts = [this.body, this.head, this.leftArm, this.rightArm,
+      this.leftLeg, this.rightLeg, this.leftFoot, this.rightFoot,
+      this.accentDetail, this.weapon, this.accessoryBehind, this.accessoryFront];
+    for (const p of parts) {
+      p.tint = 0xffffff;
+    }
+    // Bright container tint creates visible flash on dark-colored fighters
+    this.container.tint = 0xffffee;
+
+    // Restore after 80ms
+    this.flashTimer = setTimeout(() => {
+      this.container.tint = 0xffffff;
+      this.flashTimer = null;
+    }, 80);
   }
 
   /** Apply remote player state with interpolation for smooth movement */

@@ -5,14 +5,20 @@ export class ArenaBackground {
   readonly container: Container;
   private readonly graphics: Graphics;
   private readonly config: BackgroundConfig;
+  private width: number;
+  private height: number;
+  private groundY: number;
 
   constructor(
     config: BackgroundConfig | undefined,
-    private width: number,
-    private height: number,
-    private groundY: number,
+    width: number,
+    height: number,
+    groundY: number,
   ) {
     this.config = config ?? FALLBACK_BACKGROUND;
+    this.width = width;
+    this.height = height;
+    this.groundY = groundY;
     this.container = new Container();
     this.graphics = new Graphics();
     this.container.addChild(this.graphics);
@@ -93,6 +99,103 @@ export class ArenaBackground {
         this.graphics.rect(0, ly, this.width, 1);
         this.graphics.fill({ color: groundColor, alpha: 0.4 });
       }
+    }
+
+    // Environment elements — flat silhouette shapes in the midground
+    this.drawElements(midColor);
+  }
+
+  private darkenColor(color: number, factor: number): number {
+    const r = Math.floor(((color >> 16) & 0xff) * factor);
+    const g = Math.floor(((color >> 8) & 0xff) * factor);
+    const b = Math.floor((color & 0xff) * factor);
+    return (r << 16) | (g << 8) | b;
+  }
+
+  private drawElements(midColor: number): void {
+    const elements = this.config.elements;
+    if (!elements || elements.length === 0) return;
+
+    const silColor = this.darkenColor(midColor, 0.6);
+    const baseY = this.groundY;
+    const count = elements.length;
+    const sectionW = this.width / (count + 1);
+
+    for (let i = 0; i < count; i++) {
+      const tag = elements[i].toLowerCase();
+      const cx = sectionW * (i + 1);
+      this.drawElementShape(tag, cx, baseY, sectionW * 0.6, silColor);
+    }
+  }
+
+  private drawElementShape(
+    tag: string, cx: number, baseY: number,
+    maxW: number, color: number,
+  ): void {
+    const g = this.graphics;
+
+    if (tag.includes('building') || tag.includes('tower') || tag.includes('skyscraper')) {
+      // Tall rectangle with antenna
+      const w = maxW * 0.3;
+      const h = maxW * 0.9;
+      g.rect(cx - w / 2, baseY - h, w, h);
+      g.fill({ color, alpha: 0.5 });
+      // Antenna
+      g.rect(cx - 1, baseY - h - maxW * 0.15, 2, maxW * 0.15);
+      g.fill({ color, alpha: 0.4 });
+    } else if (tag.includes('tree') || tag.includes('palm') || tag.includes('forest')) {
+      // Triangle canopy on thin trunk
+      const trunkW = maxW * 0.06;
+      const trunkH = maxW * 0.3;
+      g.rect(cx - trunkW / 2, baseY - trunkH, trunkW, trunkH);
+      g.fill({ color, alpha: 0.5 });
+      // Canopy — circle
+      const canopyR = maxW * 0.18;
+      g.circle(cx, baseY - trunkH - canopyR * 0.6, canopyR);
+      g.fill({ color, alpha: 0.45 });
+    } else if (tag.includes('mountain') || tag.includes('hill') || tag.includes('volcano')) {
+      // Triangle peak
+      const halfW = maxW * 0.4;
+      const h = maxW * 0.6;
+      g.moveTo(cx, baseY - h);
+      g.lineTo(cx + halfW, baseY);
+      g.lineTo(cx - halfW, baseY);
+      g.closePath();
+      g.fill({ color, alpha: 0.4 });
+    } else if (tag.includes('rock') || tag.includes('boulder') || tag.includes('stone')) {
+      // Squat rounded rect
+      const w = maxW * 0.25;
+      const h = maxW * 0.15;
+      g.roundRect(cx - w / 2, baseY - h, w, h, h * 0.4);
+      g.fill({ color, alpha: 0.5 });
+    } else if (tag.includes('light') || tag.includes('lamp') || tag.includes('lantern')) {
+      // Thin pole with glowing circle
+      g.rect(cx - 1.5, baseY - maxW * 0.5, 3, maxW * 0.5);
+      g.fill({ color, alpha: 0.4 });
+      g.circle(cx, baseY - maxW * 0.5, 5);
+      g.fill({ color: 0xffffcc, alpha: 0.3 });
+    } else if (tag.includes('fence') || tag.includes('wall') || tag.includes('barrier')) {
+      // Low horizontal rect
+      const w = maxW * 0.6;
+      const h = maxW * 0.08;
+      g.rect(cx - w / 2, baseY - h - maxW * 0.02, w, h);
+      g.fill({ color, alpha: 0.4 });
+    } else if (tag.includes('cactus')) {
+      // Vertical rect with two stubs
+      const w = maxW * 0.06;
+      const h = maxW * 0.35;
+      g.rect(cx - w / 2, baseY - h, w, h);
+      g.fill({ color, alpha: 0.5 });
+      g.rect(cx + w / 2, baseY - h * 0.7, w * 0.8, h * 0.2);
+      g.fill({ color, alpha: 0.5 });
+      g.rect(cx - w / 2 - w * 0.8, baseY - h * 0.5, w * 0.8, h * 0.2);
+      g.fill({ color, alpha: 0.5 });
+    } else {
+      // Generic — small rounded blob
+      const w = maxW * 0.2;
+      const h = maxW * 0.12;
+      g.roundRect(cx - w / 2, baseY - h, w, h, h * 0.5);
+      g.fill({ color, alpha: 0.35 });
     }
   }
 

@@ -8,6 +8,7 @@ import { AIOpponent } from './AIOpponent';
 import { type FighterConfig } from '../ai/fighterConfig';
 import { type MultiplayerSession } from '../network/multiplayer';
 import { SYNC_RATE_MS, type StateMessage, type ActionMessage } from '../network/syncProtocol';
+import { commentary } from './CommentarySystem';
 
 export type GameMode = 'vsAI' | 'vsOnline';
 
@@ -82,12 +83,31 @@ export class GameLoop {
 
     // Combat system
     this.combat = new CombatSystem(this.gameContainer);
-    this.combat.onHit = (_attacker, defender, _damage, _isHeavy) => {
+    this.combat.onHit = (attacker, defender, _damage, _isHeavy) => {
       this.callbacks.onHealthChange(this.p1.hp, this.p2.hp);
       if (defender === this.p2 && this.ai) {
         this.ai.onDamageTaken();
       }
+      // Commentary: low health warning
+      if (defender.hp > 0 && defender.hp <= 25) {
+        commentary.play(defender.config.name, 'low_health');
+      }
+      // Commentary: special move
+      if (attacker.state === 'attacking' && attacker.specialCooldown > 0) {
+        commentary.play(attacker.config.name, 'special');
+      }
     };
+
+    // Load commentary audio (non-blocking — never delays game start)
+    commentary.reset();
+    const p1Commentary = (p1Config as unknown as Record<string, unknown>).commentary as Record<string, string> | null | undefined;
+    const p2Commentary = (p2Config as unknown as Record<string, unknown>).commentary as Record<string, string> | null | undefined;
+    commentary.loadFromConfig(p1Config.name, p1Commentary).catch(() => {});
+    commentary.loadFromConfig(p2Config.name, p2Commentary).catch(() => {});
+
+    // Play intro commentary after a short delay (gives audio time to load)
+    commentary.playDelayed(p1Config.name, 'intro', 500);
+    commentary.playDelayed(p2Config.name, 'intro', 2500);
 
     // Controls
     this.controls = new Controls();
@@ -242,11 +262,13 @@ export class GameLoop {
       this.gameOver = true;
       this.app.ticker.stop();
       console.log('[GameLoop] P1 dead, P2 wins:', this.p2.config.name);
+      commentary.playDelayed(this.p2.config.name, 'victory', 400);
       this.callbacks.onGameOver(this.p2.config);
     } else if (this.p2.state === 'dead') {
       this.gameOver = true;
       this.app.ticker.stop();
       console.log('[GameLoop] P2 dead, P1 wins:', this.p1.config.name);
+      commentary.playDelayed(this.p1.config.name, 'victory', 400);
       this.callbacks.onGameOver(this.p1.config);
     }
   };
@@ -269,6 +291,7 @@ export class GameLoop {
 
     // 3. Clean up game objects last
     this.combat.cleanup();
+    commentary.destroy();
     this.gameContainer.destroy({ children: true });
   }
 }
