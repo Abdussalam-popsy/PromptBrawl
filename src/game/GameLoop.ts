@@ -284,16 +284,21 @@ export class GameLoop {
     this.callbacks.onSpecialCooldown(this.p1.specialCooldown, this.p2.specialCooldown);
 
     // Check game over — stop ticker IMMEDIATELY to prevent null refs
+    // Delay onGameOver by 2200ms so blob death reveal plays out
     if (this.p1.state === 'dead') {
       this.gameOver = true;
       this.app.ticker.stop();
       commentary.playDelayed(this.p2.config.name, 'victory', 400);
-      this.callbacks.onGameOver(this.p2.config);
+      setTimeout(() => {
+        if (!this.destroyed) this.callbacks.onGameOver(this.p2.config);
+      }, 2200);
     } else if (this.p2.state === 'dead') {
       this.gameOver = true;
       this.app.ticker.stop();
       commentary.playDelayed(this.p1.config.name, 'victory', 400);
-      this.callbacks.onGameOver(this.p1.config);
+      setTimeout(() => {
+        if (!this.destroyed) this.callbacks.onGameOver(this.p1.config);
+      }, 2200);
     }
   };
 

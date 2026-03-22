@@ -181,6 +181,15 @@ export function App() {
       setIsGeneratingOpponent(true);
       const aiPrompt = getRandomAIPrompt();
       const aiConfig = await generateFighter(aiPrompt, 2);
+      // Preload AI sprite so it's cached before game renders
+      if (aiConfig.sprite_url) {
+        await new Promise<void>((resolve) => {
+          const img = new Image();
+          img.onload = () => resolve();
+          img.onerror = () => resolve();
+          img.src = aiConfig.sprite_url!;
+        });
+      }
       setIsGeneratingOpponent(false);
       setPeerConfig(aiConfig);
       peerConfigRef.current = aiConfig;

@@ -32,12 +32,28 @@ export function PromptInput({ playerNumber, onFighterReady, onBack, isGenerating
     return () => clearInterval(interval);
   }, []);
 
+  const [loadingMsg, setLoadingMsg] = useState('');
+
   const handleGenerate = useCallback(async () => {
     if (!prompt.trim() || loading) return;
     setLoading(true);
+    setLoadingMsg('Claude is imagining your fighter...');
     const config = await generateFighter(prompt.trim());
+
+    // Preload sprite image so it's cached before card/game renders
+    if (config.sprite_url) {
+      setLoadingMsg(`${config.name} is materializing...`);
+      await new Promise<void>((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve();
+        img.onerror = () => resolve(); // don't block on error
+        img.src = config.sprite_url!;
+      });
+    }
+
     setFighter(config);
     setLoading(false);
+    setLoadingMsg('');
   }, [prompt, loading]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -260,7 +276,7 @@ export function PromptInput({ playerNumber, onFighterReady, onBack, isGenerating
                   borderRadius: '50%',
                   animation: 'spin 0.6s linear infinite',
                 }} />
-                CLAUDE IS IMAGINING YOUR FIGHTER...
+                {loadingMsg || 'CLAUDE IS IMAGINING YOUR FIGHTER...'}
               </span>
             ) : (
               'GENERATE FIGHTER'

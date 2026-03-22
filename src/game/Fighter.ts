@@ -164,6 +164,7 @@ export class Fighter {
   private screenScale: number = 1;
   private spriteObj: Sprite | null = null;
   private useSprite: boolean = false;
+  private rigGraphics: Graphics[] = [];
 
   constructor(config: FighterConfig, startX: number, startY: number, facing: 1 | -1, canvasWidth: number = 800, canvasHeight: number = 600) {
     this.config = config;
@@ -225,6 +226,15 @@ export class Fighter {
     this.container.addChild(this.accessoryFront);    // hats, horns, visor — in front
     this.container.addChild(this.leftEye);
     this.container.addChild(this.rightEye);
+
+    // Collect all rig parts for batch visibility control
+    this.rigGraphics = [
+      this.shadow, this.leftFoot, this.rightFoot,
+      this.leftLeg, this.rightLeg, this.accessoryBehind,
+      this.leftArm, this.body, this.accentDetail,
+      this.rightArm, this.weapon, this.head,
+      this.accessoryFront, this.leftEye, this.rightEye,
+    ];
 
     this.draw();
 
@@ -1015,10 +1025,19 @@ export class Fighter {
 
     if (this.hp <= 0) {
       this.state = 'dead';
-      // Death fade — no flash
-      gsap.to(this.container, { alpha: 0, duration: 0.4 });
       if (this.useSprite && this.spriteObj) {
-        gsap.to(this.spriteObj, { alpha: 0, duration: 0.4 });
+        // Blob death reveal: sprite fades out, rig fades in, holds, then fades out
+        // Start rig at alpha 0
+        for (const g of this.rigGraphics) g.alpha = 0;
+        this.setRigVisible(false); // ensure all at 0
+        // Make rig parts visible in the container (unhide them)
+        const tl = gsap.timeline();
+        tl.to(this.spriteObj, { alpha: 0, duration: 0.6 }, 0);
+        tl.to(this.rigGraphics, { alpha: 0.9, duration: 0.6 }, 0);
+        tl.to(this.rigGraphics, { alpha: 0, duration: 0.5 }, '+=0.8');
+      } else {
+        // Non-sprite fighter: simple container fade
+        gsap.to(this.container, { alpha: 0, duration: 0.4 });
       }
     } else {
       // Hit flash — white tint then restore
